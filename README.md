@@ -1,3 +1,5 @@
+<img src="assets/schienle-logo.png" alt="Schienle Magnettechnik" height=100>
+
 # Schienle_PCB_Freigabe
 
 KiCad-Plugin fuer die PCB-Freigabe: Index eingeben, Fertigungsdaten erstellen und das Projekt mit Index-Bezeichnung archivieren (siehe [Release workflow (Index)](#release-workflow-index)).
