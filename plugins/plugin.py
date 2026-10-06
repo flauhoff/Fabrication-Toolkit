@@ -4,7 +4,8 @@ import pcbnew  # type: ignore
 
 from .thread import ProcessThread
 from .events import StatusEvent
-from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT
+from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, ARCHIVE_PROJECT_OPT, OVERWRITE_ARCHIVE_OPT
+from .archive import normalize_index, get_project_archive_path
 from .utils import load_user_options, save_user_options, get_layer_names
 
 
@@ -38,7 +39,19 @@ class KiCadToJLCForm(wx.Frame):
             EXCLUDE_DNP_OPT: False,
             OPEN_BROWSER_OPT: True,
             BACKUP_OPT: True,
+            INDEX_OPT: "",
+            SET_REVISION_OPT: True,
+            ARCHIVE_PROJECT_OPT: True,
         })
+
+        self.mIndexLabel = wx.StaticText(self, label='Index:')
+        self.mIndexControl = wx.TextCtrl(self, size=wx.Size(600, 50))
+        self.mIndexControl.Hint = "Index (e.g. A, B, 01) [required for project archive]"
+        self.mIndexControl.SetValue(userOptions[INDEX_OPT] or pcbnew.GetBoard().GetTitleBlock().GetRevision())
+        self.mSetRevisionCheckbox = wx.CheckBox(self, label='Write index to title block revision (saves the board)')
+        self.mSetRevisionCheckbox.SetValue(userOptions[SET_REVISION_OPT])
+        self.mArchiveProjectCheckbox = wx.CheckBox(self, label='Archive project with index')
+        self.mArchiveProjectCheckbox.SetValue(userOptions[ARCHIVE_PROJECT_OPT])
 
         self.mOptionsLabel = wx.StaticText(self, label='Options:')
         # self.mOptionsSeparator = wx.StaticLine(self)
@@ -80,6 +93,10 @@ class KiCadToJLCForm(wx.Frame):
 
         boxSizer = wx.BoxSizer(wx.VERTICAL)
 
+        boxSizer.Add(self.mIndexLabel, 0, wx.ALL, 5)
+        boxSizer.Add(self.mIndexControl, 0, wx.ALL, 5)
+        boxSizer.Add(self.mSetRevisionCheckbox, 0, wx.ALL, 5)
+        boxSizer.Add(self.mArchiveProjectCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mOptionsLabel, 0, wx.ALL, 5)
         # boxSizer.Add(self.mOptionsSeparator, 0, wx.ALL, 5)
         boxSizer.Add(self.mArchiveNameControl, 0, wx.ALL, 5)
@@ -113,6 +130,9 @@ class KiCadToJLCForm(wx.Frame):
 
     def onGenerateButtonClick(self, event):
         options = dict()
+        options[INDEX_OPT] = self.mIndexControl.GetValue().strip()
+        options[SET_REVISION_OPT] = self.mSetRevisionCheckbox.GetValue()
+        options[ARCHIVE_PROJECT_OPT] = self.mArchiveProjectCheckbox.GetValue()
         options[ARCHIVE_NAME] = self.mArchiveNameControl.GetValue()
         options[EXTRA_LAYERS] = self.mAdditionalLayersControl.GetValue()
         options[ALL_ACTIVE_LAYERS_OPT] = self.mAllActiveLayersCheckbox.GetValue()
@@ -124,8 +144,27 @@ class KiCadToJLCForm(wx.Frame):
         options[OPEN_BROWSER_OPT] = self.mOpenBrowserCheckbox.GetValue()
         options[BACKUP_OPT] = self.mBackupCheckbox.GetValue()
 
-        save_user_options(options)
+        if not normalize_index(options[INDEX_OPT]) and (options[SET_REVISION_OPT] or options[ARCHIVE_PROJECT_OPT]):
+            wx.MessageBox("Please enter an index.", "Fabrication Toolkit", wx.OK | wx.ICON_WARNING)
+            self.mIndexControl.SetFocus()
+            return
 
+        options[OVERWRITE_ARCHIVE_OPT] = False
+        if options[ARCHIVE_PROJECT_OPT]:
+            archive_path = get_project_archive_path(pcbnew.GetBoard().GetFileName(), options[INDEX_OPT])
+            if os.path.exists(archive_path):
+                answer = wx.MessageBox("A project archive for index '{}' already exists:\n{}\n\nOverwrite it?".format(options[INDEX_OPT], archive_path),
+                                       "Fabrication Toolkit", wx.YES_NO | wx.ICON_QUESTION)
+                if answer != wx.YES:
+                    return
+                options[OVERWRITE_ARCHIVE_OPT] = True
+
+        save_user_options({k: v for k, v in options.items() if k != OVERWRITE_ARCHIVE_OPT})
+
+        self.mIndexLabel.Hide()
+        self.mIndexControl.Hide()
+        self.mSetRevisionCheckbox.Hide()
+        self.mArchiveProjectCheckbox.Hide()
         self.mOptionsLabel.Hide()
         self.mArchiveNameControl.Hide()
         self.mAdditionalLayersControl.Hide()

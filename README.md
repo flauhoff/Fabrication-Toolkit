@@ -39,6 +39,16 @@ Options can be set in the dialog that appears when the plugin is invoked. They a
 
 <img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/assets/options.png?raw=true" height=275>
 
+### Release workflow (Index)
+
+☑ __Index__: Index of this release (e.g. `A`, `B`, `01`). Available as text variable `${INDEX}` in the archive name.</br>
+☑ __Write index to title block revision__: Sets the board's title block revision to the index and saves the board *before* plotting, so `${REVISION}` on the PCB already shows the new index.</br>
+☑ __Archive project with index__: After generating the fabrication data, the complete project directory is zipped to `archive/<project>_Index_<INDEX>.zip`. It contains schematics, board, project libraries, 3D models etc. plus the production data of this index. Other indices, backups, lock files, `fp-info-cache` and VCS folders are excluded. An existing archive of the same index is only overwritten after confirmation.</br>
+
+When an index is set, the fabrication data is written to `production/Index_<INDEX>/` instead of `production/`, so every index keeps its own data set.
+
+### Fabrication options
+
 ☑ __Archive name__: Name of the archive file to be generated. Can include text variables, such as e.g. `${TITLE}_${REVISION}`</br>
 ☑ __Additional layers__: Comma-separated list of additional layers to include in the gerber archive.</br>
 ☑ __Plot all active layers__: Whether to include all layers, instead of just the layers required by JLCPCB.</br>
@@ -215,6 +225,17 @@ options:
                         Name of the generated archives
   --openBrowser, -b     Open web browser with directory file overview after generation
   --noBackup, -nB       Do not create a backup of the project before generation
+  --index INDEX, -i INDEX
+                        Index of this release (e.g. A, B, 01)
+  --setRevision, -sR    Write the index into the title block revision and save the board
+  --archiveProject, -aP Archive the complete project as archive/<project>_Index_<INDEX>.zip
+  --overwriteArchive, -oA
+                        Overwrite an existing project archive of the same index
+```
+
+Complete release of index `B`:
+```
+python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -i B -sR -aP -f -nI
 ```
 
 ### Notes

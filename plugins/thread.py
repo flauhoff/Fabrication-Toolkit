@@ -9,9 +9,10 @@ import logging
 from threading import Thread
 from .events import StatusEvent
 from .process import ProcessManager
+from .archive import archive_project, normalize_index, get_index_folder_name
 from .config import *
 from .options import *
-from .utils import print_cli_progress_bar
+from .utils import print_cli_progress_bar, save_board
 
 
 class ProcessThread(Thread):
@@ -50,6 +51,7 @@ class ProcessThread(Thread):
             "REVISION": titleBlock.GetRevision(),
             "TITLE": titleBlock.GetTitle(),
             "COMPANY": titleBlock.GetCompany(),
+            "INDEX": self.options.get(INDEX_OPT) or "",
         }
 
         for comment_index in range(9):
@@ -74,9 +76,17 @@ class ProcessThread(Thread):
         os.makedirs(temp_dir_gerber)
 
         _, temp_file = tempfile.mkstemp()
-        project_directory = os.path.dirname(self.process_manager.board.GetFileName())
+        board_file = self.process_manager.board.GetFileName()
+        project_directory = os.path.dirname(board_file)
+        index = normalize_index(self.options.get(INDEX_OPT))
 
         try:
+            # Write the index into the title block (revision) before plotting, so that
+            # ${REVISION} on the board (e.g. silkscreen) already shows the new index
+            if index and self.options.get(SET_REVISION_OPT):
+                self.process_manager.board.GetTitleBlock().SetRevision(self.options[INDEX_OPT].strip())
+                save_board(self.process_manager.board)
+
             # Verify all zones are up-to-date
             self.progress(10)
             if (self.options[AUTO_FILL_OPT]):
@@ -150,12 +160,16 @@ class ProcessThread(Thread):
         # make output dir
         filename = os.path.splitext(os.path.basename(self.process_manager.board.GetFileName()))[0]
         output_path = os.path.join(project_directory, outputFolder)
+        if index:
+            output_path = os.path.join(output_path, get_index_folder_name(index))
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         
         # rename gerber archive
         if self.options[ARCHIVE_NAME]:
             baseName = self.expandTextVariables(self.options[ARCHIVE_NAME])
+        elif index:
+            baseName = "{} {}".format(title or filename, get_index_folder_name(index))
         else:
             baseName = "{} {}".format(title or filename, revision or '')
 
@@ -185,6 +199,17 @@ class ProcessThread(Thread):
         except Exception as e:
             if self.openBrowser:
                 webbrowser.open("file://%s" % (temp_dir))
+
+        # archive the complete project (incl. the production data of this index)
+        if index and self.options.get(ARCHIVE_PROJECT_OPT):
+            self.progress(98)
+            try:
+                archive_project(board_file, index, outputFolder, overwrite=self.options.get(OVERWRITE_ARCHIVE_OPT, False))
+            except Exception as e:
+                if self.wx is None:
+                    logging.error("Fabrication Toolkit - Archive error: " + str(e))
+                else:
+                    wx.MessageBox(str(e), "Fabrication Toolkit - Archive error", wx.OK | wx.ICON_ERROR)
 
         if self.wx is None: 
             self.progress(100)
