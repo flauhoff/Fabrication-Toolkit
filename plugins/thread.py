@@ -10,6 +10,7 @@ from threading import Thread
 from .events import StatusEvent
 from .process import ProcessManager
 from .archive import archive_project, normalize_index, get_index_folder_name
+from .step import export_step, stepFileName
 from .config import *
 from .options import *
 from .utils import print_cli_progress_bar, save_board
@@ -117,6 +118,17 @@ class ProcessThread(Thread):
             self.progress(70)
             self.process_manager.generate_bom(temp_dir)
 
+            # export 3D model (uses the saved board file, see README)
+            if self.options.get(STEP_EXPORT_OPT):
+                self.progress(75)
+                try:
+                    export_step(board_file, os.path.join(temp_dir, stepFileName))
+                except Exception as e:
+                    if self.wx is None:
+                        logging.error("Schienle_PCB_Freigabe - STEP export error: " + str(e))
+                    else:
+                        wx.MessageBox(str(e), "Schienle_PCB_Freigabe - STEP export error", wx.OK | wx.ICON_ERROR)
+
             # generate production archive
             self.progress(85)
             temp_file = self.process_manager.generate_archive(temp_dir_gerber, temp_file)
@@ -175,6 +187,9 @@ class ProcessThread(Thread):
 
         gerberArchiveName = ProcessManager.normalize_filename("_".join((baseName.strip() + '.zip').split()))
         os.rename(temp_file, os.path.join(temp_dir, gerberArchiveName))
+
+        if os.path.exists(os.path.join(temp_dir, stepFileName)):
+            os.rename(os.path.join(temp_dir, stepFileName), os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + '.step').split()))))
 
         if self.options[ARCHIVE_NAME]:
             if os.path.exists(os.path.join(temp_dir, designatorsFileName)):

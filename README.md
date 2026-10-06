@@ -55,6 +55,8 @@ Options can be set in the dialog that appears when the plugin is invoked. They a
 ☑ __Write index to title block revision__: Sets the board's title block revision to the index and saves the board *before* plotting, so `${REVISION}` on the PCB already shows the new index.</br>
 ☑ __Archive project with index__: After generating the fabrication data, the complete project directory is zipped to `archive/<project>_Index_<INDEX>.zip`. It contains schematics, board, project libraries, 3D models etc. plus the production data of this index. Other indices, backups, lock files, `fp-info-cache` and VCS folders are excluded. An existing archive of the same index is only overwritten after confirmation.</br>
 
+☑ __Export 3D model (STEP)__: Exports the board incl. component models as `<Title>_Index_<INDEX>.step` next to the fabrication data (and therefore also into the project archive). Uses `kicad-cli` (KiCad 7+) on the **saved** board file, so save the board first (it is saved automatically when the index is written to the title block).</br>
+
 When an index is set, the fabrication data is written to `production/Index_<INDEX>/` instead of `production/`, so every index keeps its own data set.
 
 ### Fabrication options
@@ -241,11 +243,12 @@ options:
   --archiveProject, -aP Archive the complete project as archive/<project>_Index_<INDEX>.zip
   --overwriteArchive, -oA
                         Overwrite an existing project archive of the same index
+  --stepExport, -st     Export the 3D model as STEP (requires KiCad 7+)
 ```
 
 Complete release of index `B`:
 ```
-python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -i B -sR -aP -f -nI
+python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -i B -sR -aP -st -f -nI
 ```
 
 ### Notes

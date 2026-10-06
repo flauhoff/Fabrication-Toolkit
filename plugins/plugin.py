@@ -4,7 +4,7 @@ import pcbnew  # type: ignore
 
 from .thread import ProcessThread
 from .events import StatusEvent
-from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, ARCHIVE_PROJECT_OPT, OVERWRITE_ARCHIVE_OPT
+from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, ARCHIVE_PROJECT_OPT, OVERWRITE_ARCHIVE_OPT, STEP_EXPORT_OPT
 from .archive import normalize_index, get_project_archive_path
 from .utils import load_user_options, save_user_options, get_layer_names
 
@@ -42,6 +42,7 @@ class KiCadToJLCForm(wx.Frame):
             INDEX_OPT: "",
             SET_REVISION_OPT: True,
             ARCHIVE_PROJECT_OPT: True,
+            STEP_EXPORT_OPT: True,
         })
 
         self.mIndexLabel = wx.StaticText(self, label='Index:')
@@ -52,6 +53,9 @@ class KiCadToJLCForm(wx.Frame):
         self.mSetRevisionCheckbox.SetValue(userOptions[SET_REVISION_OPT])
         self.mArchiveProjectCheckbox = wx.CheckBox(self, label='Archive project with index')
         self.mArchiveProjectCheckbox.SetValue(userOptions[ARCHIVE_PROJECT_OPT])
+
+        self.mStepExportCheckbox = wx.CheckBox(self, label='Export 3D model (STEP)')
+        self.mStepExportCheckbox.SetValue(userOptions[STEP_EXPORT_OPT])
 
         self.mOptionsLabel = wx.StaticText(self, label='Options:')
         # self.mOptionsSeparator = wx.StaticLine(self)
@@ -97,6 +101,7 @@ class KiCadToJLCForm(wx.Frame):
         boxSizer.Add(self.mIndexControl, 0, wx.ALL, 5)
         boxSizer.Add(self.mSetRevisionCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mArchiveProjectCheckbox, 0, wx.ALL, 5)
+        boxSizer.Add(self.mStepExportCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mOptionsLabel, 0, wx.ALL, 5)
         # boxSizer.Add(self.mOptionsSeparator, 0, wx.ALL, 5)
         boxSizer.Add(self.mArchiveNameControl, 0, wx.ALL, 5)
@@ -133,6 +138,7 @@ class KiCadToJLCForm(wx.Frame):
         options[INDEX_OPT] = self.mIndexControl.GetValue().strip()
         options[SET_REVISION_OPT] = self.mSetRevisionCheckbox.GetValue()
         options[ARCHIVE_PROJECT_OPT] = self.mArchiveProjectCheckbox.GetValue()
+        options[STEP_EXPORT_OPT] = self.mStepExportCheckbox.GetValue()
         options[ARCHIVE_NAME] = self.mArchiveNameControl.GetValue()
         options[EXTRA_LAYERS] = self.mAdditionalLayersControl.GetValue()
         options[ALL_ACTIVE_LAYERS_OPT] = self.mAllActiveLayersCheckbox.GetValue()
@@ -165,6 +171,7 @@ class KiCadToJLCForm(wx.Frame):
         self.mIndexControl.Hide()
         self.mSetRevisionCheckbox.Hide()
         self.mArchiveProjectCheckbox.Hide()
+        self.mStepExportCheckbox.Hide()
         self.mOptionsLabel.Hide()
         self.mArchiveNameControl.Hide()
         self.mAdditionalLayersControl.Hide()

@@ -24,6 +24,7 @@ if __name__ == '__main__':
     parser.add_argument("--setRevision",        "-sR", action="store_true", help="Write the index into the title block revision and save the board")
     parser.add_argument("--archiveProject",     "-aP", action="store_true", help="Archive the complete project as archive/<project>_Index_<INDEX>.zip")
     parser.add_argument("--overwriteArchive",   "-oA", action="store_true", help="Overwrite an existing project archive of the same index")
+    parser.add_argument("--stepExport",         "-st", action="store_true", help="Export the 3D model as STEP (requires KiCad 7+)")
     args = parser.parse_args()
 
     if (args.setRevision or args.archiveProject) and not args.index:
@@ -43,6 +44,7 @@ if __name__ == '__main__':
     options[SET_REVISION_OPT] = args.setRevision
     options[ARCHIVE_PROJECT_OPT] = args.archiveProject
     options[OVERWRITE_ARCHIVE_OPT] = args.overwriteArchive
+    options[STEP_EXPORT_OPT] = args.stepExport
     
     openBrowser = args.openBrowser
     nonInteractive = args.nonInteractive
