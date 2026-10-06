@@ -28,7 +28,7 @@ class ProcessThread(Thread):
             try:
                 self.board = pcbnew.LoadBoard(cli)
             except Exception as e:
-                logging.error("Fabrication Toolkit - Error" + str(e))
+                logging.error("Schienle_PCB_Freigabe - Error" + str(e))
                 return
         else:
             self.board = None
@@ -125,9 +125,9 @@ class ProcessThread(Thread):
             temp_file = os.path.join(temp_dir, os.path.basename(temp_file))
         except Exception as e:
             if self.wx is None:
-                logging.error("Fabrication Toolkit - Error" + str(e))
+                logging.error("Schienle_PCB_Freigabe - Error" + str(e))
             else:
-                wx.MessageBox(str(e), "Fabrication Toolkit - Error", wx.OK | wx.ICON_ERROR)
+                wx.MessageBox(str(e), "Schienle_PCB_Freigabe - Error", wx.OK | wx.ICON_ERROR)
             self.progress(-1)
             return
 
@@ -207,9 +207,9 @@ class ProcessThread(Thread):
                 archive_project(board_file, index, outputFolder, overwrite=self.options.get(OVERWRITE_ARCHIVE_OPT, False))
             except Exception as e:
                 if self.wx is None:
-                    logging.error("Fabrication Toolkit - Archive error: " + str(e))
+                    logging.error("Schienle_PCB_Freigabe - Archive error: " + str(e))
                 else:
-                    wx.MessageBox(str(e), "Fabrication Toolkit - Archive error", wx.OK | wx.ICON_ERROR)
+                    wx.MessageBox(str(e), "Schienle_PCB_Freigabe - Archive error", wx.OK | wx.ICON_ERROR)
 
         if self.wx is None: 
             self.progress(100)

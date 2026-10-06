@@ -16,7 +16,7 @@ class KiCadToJLCForm(wx.Frame):
             self,
             None,
             id=wx.ID_ANY,
-            title=u"Fabrication Toolkit",
+            title=u"Schienle_PCB_Freigabe",
             pos=wx.DefaultPosition,
             size=wx.DefaultSize,
             style=wx.DEFAULT_DIALOG_STYLE)
@@ -145,7 +145,7 @@ class KiCadToJLCForm(wx.Frame):
         options[BACKUP_OPT] = self.mBackupCheckbox.GetValue()
 
         if not normalize_index(options[INDEX_OPT]) and (options[SET_REVISION_OPT] or options[ARCHIVE_PROJECT_OPT]):
-            wx.MessageBox("Please enter an index.", "Fabrication Toolkit", wx.OK | wx.ICON_WARNING)
+            wx.MessageBox("Please enter an index.", "Schienle_PCB_Freigabe", wx.OK | wx.ICON_WARNING)
             self.mIndexControl.SetFocus()
             return
 
@@ -154,7 +154,7 @@ class KiCadToJLCForm(wx.Frame):
             archive_path = get_project_archive_path(pcbnew.GetBoard().GetFileName(), options[INDEX_OPT])
             if os.path.exists(archive_path):
                 answer = wx.MessageBox("A project archive for index '{}' already exists:\n{}\n\nOverwrite it?".format(options[INDEX_OPT], archive_path),
-                                       "Fabrication Toolkit", wx.YES_NO | wx.ICON_QUESTION)
+                                       "Schienle_PCB_Freigabe", wx.YES_NO | wx.ICON_QUESTION)
                 if answer != wx.YES:
                     return
                 options[OVERWRITE_ARCHIVE_OPT] = True
@@ -180,14 +180,14 @@ class KiCadToJLCForm(wx.Frame):
         self.mGaugeStatus.Show()
 
         self.Fit()
-        self.SetTitle('Fabrication Toolkit (Processing...)')
+        self.SetTitle('Schienle_PCB_Freigabe (Processing...)')
 
         StatusEvent.invoke(self, self.updateDisplay)
         ProcessThread(self, options, openBrowser=options[OPEN_BROWSER_OPT])
 
     def updateDisplay(self, status):
         if status.data == -1:
-            self.SetTitle('Fabrication Toolkit (Done!)')
+            self.SetTitle('Schienle_PCB_Freigabe (Done!)')
             pcbnew.Refresh()
             self.Destroy()
         else:
@@ -197,9 +197,9 @@ class KiCadToJLCForm(wx.Frame):
 # Plugin definition
 class Plugin(pcbnew.ActionPlugin):
     def __init__(self):
-        self.name = "Fabrication Toolkit"
+        self.name = "Schienle_PCB_Freigabe"
         self.category = "Manufacturing"
-        self.description = "Toolkit for automating PCB fabrication process with KiCad and JLC PCB"
+        self.description = "PCB-Freigabe: Fertigungsdaten erstellen, Index setzen und Projekt archivieren"
         self.pcbnew_icon_support = hasattr(self, "show_toolbar_button")
         self.show_toolbar_button = True
         self.icon_file_name = os.path.join(os.path.dirname(__file__), 'icon.png')

@@ -1,3 +1,11 @@
+# Schienle_PCB_Freigabe
+
+KiCad-Plugin fuer die PCB-Freigabe: Index eingeben, Fertigungsdaten erstellen und das Projekt mit Index-Bezeichnung archivieren (siehe [Release workflow (Index)](#release-workflow-index)).
+
+Autor: Schienle. Basiert auf dem [Fabrication Toolkit](https://github.com/bennymeg/Fabrication-Toolkit) von Benny Megidish (Apache-2.0); die folgende Dokumentation stammt grossteils aus dem Original.
+
+---
+
 <img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/assets/logo.svg?raw=true"
     style="display:block margin-left: auto; margin-right: auto;" alt="JLC PCB Plug-in for KiCad">
 
@@ -203,7 +211,7 @@ All the options from the GUI are also available via the cli interface:
 ```
 python3 -m plugins.cli -h
 
-usage: Fabrication Toolkit [-h] --path PATH [--additionalLayers LAYERS] [--user1VCut] [--user2AltVCut]
+usage: Schienle_PCB_Freigabe [-h] --path PATH [--additionalLayers LAYERS] [--user1VCut] [--user2AltVCut]
                            [--autoTranslate] [--autoFill] [--excludeDNP] [--allActiveLayers] [--archiveName NAME]
                            [--openBrowser] [--noBackup]
 
@@ -242,8 +250,10 @@ python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -i B -sR -aP -f -nI
 
 - On windows the commands have to be run inside the `KiCad Command Prompt`. Moreover, instead of `python3` they are run with a simple `python` in front.
 - If the CLI should be used with the installed plugin, `plugins.cli` has to be replaced with the package name. In a jobset it would look like this:
-  `python -m "${KICAD9_3RD_PARTY}plugins/com_github_bennymeg_JLC-Plugin-for-KiCad.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb"`
+  `python -m "${KICAD9_3RD_PARTY}plugins/com_schienle_Schienle_PCB_Freigabe.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb"`
 
 ## Author
 
-Benny Megidish
+Schienle
+
+Original Fabrication Toolkit: Benny Megidish

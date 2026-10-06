@@ -5,8 +5,8 @@ from .options import *
 
 
 if __name__ == '__main__':
-    parser = ap.ArgumentParser(prog="Fabrication Toolkit",
-                            description="Generates JLCPCB production files from a KiCAD board file")
+    parser = ap.ArgumentParser(prog="Schienle_PCB_Freigabe",
+                            description="Generates production files and an indexed project archive from a KiCAD board file")
 
     parser.add_argument("--path",               "-p",  type=str, help="Path to KiCAD board file", required=True)
     parser.add_argument("--additionalLayers",   "-aL", type=str, help="Additional layers(comma-separated)", metavar="LAYERS")
