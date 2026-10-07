@@ -255,7 +255,7 @@ python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -i B -sR -aP -st -f -nI
 
 - On windows the commands have to be run inside the `KiCad Command Prompt`. Moreover, instead of `python3` they are run with a simple `python` in front.
 - If the CLI should be used with the installed plugin, `plugins.cli` has to be replaced with the package name. In a jobset it would look like this:
-  `python -m "${KICAD9_3RD_PARTY}plugins/com_schienle_Schienle_PCB_Freigabe.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb"`
+  `python -m "${KICAD9_3RD_PARTY}plugins/com_schienle_Schienle-PCB-Freigabe.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb"`
 
 ## Author
 
