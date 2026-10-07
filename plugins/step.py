@@ -27,19 +27,30 @@ def find_kicad_cli():
     raise FileNotFoundError('kicad-cli was not found. STEP export requires KiCad 7 or newer.')
 
 
-def export_step(board_file, output_file, timeout=600):
+def export_step(board_file, output_file, timeout=600, logger=None):
     '''Exports the 3D model of the (saved) board file as STEP using kicad-cli.'''
     cmd = [find_kicad_cli(), 'pcb', 'export', 'step',
            '--subst-models',
            '--output', output_file,
            board_file]
 
+    if logger:
+        logger.info('Running: %s', subprocess.list2cmdline(cmd))
+
     kwargs = {}
     if sys.platform == 'win32':
         kwargs['creationflags'] = 0x08000000  # CREATE_NO_WINDOW
 
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, timeout=timeout, **kwargs)
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                text=True, errors='replace', timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired as e:
+        if logger:
+            logger.error('kicad-cli timed out after %d s, output so far:\n%s', timeout, e.output)
+        raise RuntimeError('STEP export did not finish within {} s.'.format(timeout))
+
+    if logger:
+        logger.info('kicad-cli exit code %d, output:\n%s', result.returncode, (result.stdout or '').strip())
 
     if result.returncode != 0 or not os.path.isfile(output_file):
         raise RuntimeError('STEP export failed (exit code {}):\n{}'.format(result.returncode, (result.stdout or '').strip()[-2000:]))

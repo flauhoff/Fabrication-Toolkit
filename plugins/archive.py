@@ -4,11 +4,13 @@ import shutil
 import tempfile
 import zipfile
 
+from .debuglog import logFileName
+
 archiveFolder = 'archive'
 
 # Files and folders that never belong into a project archive
 excludedDirNames = {'.git', '.svn', '.hg', '__pycache__', '.history', archiveFolder}
-excludedFileNames = {'fp-info-cache', '.DS_Store', 'Thumbs.db'}
+excludedFileNames = {'fp-info-cache', '.DS_Store', 'Thumbs.db', logFileName}
 excludedFileSuffixes = ('.lck', '.pyc', '.bak')
 excludedFilePrefixes = ('_autosave-', '~')
 

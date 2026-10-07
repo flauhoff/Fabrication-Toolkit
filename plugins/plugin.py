@@ -6,7 +6,8 @@ from .thread import ProcessThread
 from .events import StatusEvent
 from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, ARCHIVE_PROJECT_OPT, OVERWRITE_ARCHIVE_OPT, STEP_EXPORT_OPT
 from .archive import normalize_index, get_project_archive_path
-from .utils import load_user_options, save_user_options, get_layer_names
+from .utils import load_user_options, save_user_options, get_layer_names, save_board
+from .debuglog import get_logger
 
 
 # WX GUI form that show the plugin progress
@@ -92,6 +93,9 @@ class KiCadToJLCForm(wx.Frame):
         self.mGaugeStatus.SetValue(0)
         self.mGaugeStatus.Hide()
 
+        self.mStatusText = wx.StaticText(self, label='', size=wx.Size(600, -1))
+        self.mStatusText.Hide()
+
         self.mGenerateButton = wx.Button(self, label='Generate', size=wx.Size(600, 60))
         self.mGenerateButton.Bind(wx.EVT_BUTTON, self.onGenerateButtonClick)
 
@@ -115,6 +119,7 @@ class KiCadToJLCForm(wx.Frame):
         boxSizer.Add(self.mOpenBrowserCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mBackupCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mGaugeStatus, 0, wx.ALL, 5)
+        boxSizer.Add(self.mStatusText, 0, wx.ALL, 5)
         boxSizer.Add(self.mGenerateButton, 0, wx.ALL, 5)
 
         self.SetSizer(boxSizer)
@@ -185,12 +190,29 @@ class KiCadToJLCForm(wx.Frame):
         self.mBackupCheckbox.Hide()
         self.mGenerateButton.Hide()
         self.mGaugeStatus.Show()
+        self.mStatusText.Show()
+
+        # Board changes must happen in the GUI thread, not in the background thread
+        if normalize_index(options[INDEX_OPT]) and options[SET_REVISION_OPT]:
+            board = pcbnew.GetBoard()
+            log = get_logger(os.path.dirname(board.GetFileName()))
+            try:
+                log.info('Writing index %s to title block and saving board', options[INDEX_OPT])
+                board.GetTitleBlock().SetRevision(options[INDEX_OPT])
+                save_board(board)
+            except Exception as e:
+                log.exception('Saving board failed')
+                wx.MessageBox("Saving the board failed:\n{}".format(e), "Schienle_PCB_Freigabe", wx.OK | wx.ICON_ERROR)
 
         self.Fit()
         self.SetTitle('Schienle_PCB_Freigabe (Processing...)')
 
         StatusEvent.invoke(self, self.updateDisplay)
         ProcessThread(self, options, openBrowser=options[OPEN_BROWSER_OPT])
+
+    def setStatusText(self, text):
+        self.mStatusText.SetLabel(text)
+        self.SetTitle('Schienle_PCB_Freigabe - ' + text)
 
     def updateDisplay(self, status):
         if status.data == -1:

@@ -59,6 +59,8 @@ Options can be set in the dialog that appears when the plugin is invoked. They a
 
 When an index is set, the fabrication data is written to `production/Index_<INDEX>/` instead of `production/`, so every index keeps its own data set.
 
+__Debugging__: every run is logged with timestamps and the duration of each step to `schienle-pcb-freigabe.log` in the project directory (incl. KiCad version, options, the `kicad-cli` call and its output, and full error tracebacks). The current step is also shown in the dialog title, so a hanging step is visible immediately.
+
 ### Fabrication options
 
 ☑ __Archive name__: Name of the archive file to be generated. Can include text variables, such as e.g. `${TITLE}_${REVISION}`</br>

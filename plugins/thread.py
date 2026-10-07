@@ -5,7 +5,9 @@ import shutil
 import tempfile
 import webbrowser
 import datetime
+import time
 import logging
+import traceback
 from threading import Thread
 from .events import StatusEvent
 from .process import ProcessManager
@@ -14,6 +16,7 @@ from .step import export_step, stepFileName
 from .config import *
 from .options import *
 from .utils import print_cli_progress_bar, save_board
+from .debuglog import get_logger, log_environment
 
 
 class ProcessThread(Thread):
@@ -40,7 +43,34 @@ class ProcessThread(Thread):
         self.options = options
         self.openBrowser = openBrowser
         self.nonInteractive = nonInteractive
+        self.log = get_logger(os.path.dirname(self.process_manager.board.GetFileName()))
+        self._step_started = None
         self.start()
+
+    def step(self, percent, text):
+        '''Reports progress, logs the step and its predecessor's duration and shows the step in the dialog.'''
+        now = time.time()
+        if self._step_started is not None:
+            self.log.info('  ... done in %.1f s', now - self._step_started[1])
+        self._step_started = (text, now)
+        self.log.info('[%3d%%] %s', percent, text)
+        if self.wx is not None:
+            wx.CallAfter(self._set_status_text, text)
+        self.progress(percent)
+
+    def _set_status_text(self, text):
+        try:
+            self.wx.setStatusText(text)
+        except Exception:
+            pass  # dialog already closed
+
+    def error(self, title, message):
+        '''Logs an error and shows it to the user (message boxes must be opened from the GUI thread).'''
+        self.log.error('%s: %s', title, message)
+        if self.wx is None:
+            logging.error("Schienle_PCB_Freigabe - %s: %s", title, message)
+        else:
+            wx.CallAfter(wx.MessageBox, message, "Schienle_PCB_Freigabe - " + title, wx.OK | wx.ICON_ERROR)
 
     def expandTextVariables(self, string):
         board = self.board if self.board is not None else pcbnew.GetBoard()
@@ -69,8 +99,22 @@ class ProcessThread(Thread):
 
 
     def run(self):
+        self.log.info('=' * 70)
+        log_environment(self.log)
+        self.log.info('Board: %s', self.process_manager.board.GetFileName())
+        self.log.info('Options: %s', self.options)
+        try:
+            self._run()
+        except Exception:
+            # never die silently in the background thread
+            self.log.error('Unhandled error:\n%s', traceback.format_exc())
+            self.error('Error', traceback.format_exc(limit=3))
+            self.progress(100 if self.wx is None else -1)
+        self.log.info('Finished')
+
+    def _run(self):
         # initializing
-        self.progress(0)
+        self.step(0, 'Preparing')
 
         temp_dir = tempfile.mkdtemp()
         temp_dir_gerber = temp_dir + "_g"
@@ -84,76 +128,67 @@ class ProcessThread(Thread):
         try:
             # Write the index into the title block (revision) before plotting, so that
             # ${REVISION} on the board (e.g. silkscreen) already shows the new index
-            if index and self.options.get(SET_REVISION_OPT):
+            # (in the GUI this is done by the dialog in the main thread, see plugin.py)
+            if index and self.options.get(SET_REVISION_OPT) and self.wx is None:
+                self.step(5, 'Writing index to title block and saving board')
                 self.process_manager.board.GetTitleBlock().SetRevision(self.options[INDEX_OPT].strip())
                 save_board(self.process_manager.board)
 
             # Verify all zones are up-to-date
-            self.progress(10)
             if (self.options[AUTO_FILL_OPT]):
+                self.step(10, 'Filling zones')
                 self.process_manager.update_zone_fills()
 
             # generate gerber
-            self.progress(20)
+            self.step(20, 'Generating gerber files')
             self.process_manager.generate_gerber(temp_dir_gerber, self.options[EXTRA_LAYERS], self.options[EXTEND_EDGE_CUT_OPT],
                                                  self.options[ALTERNATIVE_EDGE_CUT_OPT], self.options[ALL_ACTIVE_LAYERS_OPT])
 
             # generate drill file
-            self.progress(30)
+            self.step(30, 'Generating drill files')
             self.process_manager.generate_drills(temp_dir_gerber)
 
             # generate netlist
-            self.progress(40)
+            self.step(40, 'Generating netlist')
             self.process_manager.generate_netlist(temp_dir)
 
             # generate data tables
-            self.progress(50)
+            self.step(50, 'Collecting components')
             self.process_manager.generate_tables(temp_dir, self.options[AUTO_TRANSLATE_OPT], self.options[EXCLUDE_DNP_OPT])
 
             # generate pick and place file
-            self.progress(60)
+            self.step(60, 'Generating positions file')
             self.process_manager.generate_positions(temp_dir)
 
             # generate BOM file
-            self.progress(70)
+            self.step(70, 'Generating BOM')
             self.process_manager.generate_bom(temp_dir)
 
             # export 3D model (uses the saved board file, see README)
             if self.options.get(STEP_EXPORT_OPT):
-                self.progress(75)
+                self.step(75, 'Exporting STEP (kicad-cli, may take a few minutes)')
                 try:
-                    export_step(board_file, os.path.join(temp_dir, stepFileName))
+                    export_step(board_file, os.path.join(temp_dir, stepFileName), logger=self.log)
                 except Exception as e:
-                    if self.wx is None:
-                        logging.error("Schienle_PCB_Freigabe - STEP export error: " + str(e))
-                    else:
-                        wx.MessageBox(str(e), "Schienle_PCB_Freigabe - STEP export error", wx.OK | wx.ICON_ERROR)
+                    self.error('STEP export error', str(e))
 
             # generate production archive
-            self.progress(85)
+            self.step(85, 'Creating gerber archive')
             temp_file = self.process_manager.generate_archive(temp_dir_gerber, temp_file)
             shutil.move(temp_file, temp_dir)
             shutil.rmtree(temp_dir_gerber)
             temp_file = os.path.join(temp_dir, os.path.basename(temp_file))
         except Exception as e:
-            if self.wx is None:
-                logging.error("Schienle_PCB_Freigabe - Error" + str(e))
-            else:
-                wx.MessageBox(str(e), "Schienle_PCB_Freigabe - Error", wx.OK | wx.ICON_ERROR)
-            self.progress(-1)
+            self.log.error(traceback.format_exc())
+            self.error('Error', str(e))
+            self.progress(100 if self.wx is None else -1)
             return
 
-        # progress bar done animation
-        read_so_far = 0
-        total_size = os.path.getsize(temp_file)
-        with open(temp_file, 'rb') as file:
-            while True:
-                data = file.read(10)
-                if not data:
-                    break
-                read_so_far += len(data)
-                percent = read_so_far * 1e2 / total_size
-                self.progress(85 + percent / 8)
+        self.step(88, 'Copying files to output folder')
+
+        # (the former "progress bar done animation" posted one GUI event per 10 bytes of the
+        # gerber archive, which floods the wx event queue on larger boards and freezes KiCad)
+        self.log.info('Gerber archive size: %.1f MB', os.path.getsize(temp_file) / 1e6)
 
         # generate gerber name
         title_block = self.process_manager.board.GetTitleBlock()
@@ -217,14 +252,15 @@ class ProcessThread(Thread):
 
         # archive the complete project (incl. the production data of this index)
         if index and self.options.get(ARCHIVE_PROJECT_OPT):
-            self.progress(98)
+            self.step(98, 'Archiving project')
             try:
-                archive_project(board_file, index, outputFolder, overwrite=self.options.get(OVERWRITE_ARCHIVE_OPT, False))
+                archive_path = archive_project(board_file, index, outputFolder, overwrite=self.options.get(OVERWRITE_ARCHIVE_OPT, False))
+                self.log.info('Project archive: %s (%.1f MB)', archive_path, os.path.getsize(archive_path) / 1e6)
             except Exception as e:
-                if self.wx is None:
-                    logging.error("Schienle_PCB_Freigabe - Archive error: " + str(e))
-                else:
-                    wx.MessageBox(str(e), "Schienle_PCB_Freigabe - Archive error", wx.OK | wx.ICON_ERROR)
+                self.log.error(traceback.format_exc())
+                self.error('Archive error', str(e))
+
+        self.step(99, 'Done, output: %s' % output_path)
 
         if self.wx is None: 
             self.progress(100)
