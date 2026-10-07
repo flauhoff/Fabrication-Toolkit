@@ -129,3 +129,9 @@ def print_cli_progress_bar(percent, prefix = '', suffix = '', decimals = 1, leng
     # Print New Line on Complete
     if percent == 100: 
         print()
+def save_board(board):
+    """Saves the board to its own file (used after changing the title block)"""
+    if hasattr(pcbnew, 'SaveBoard'):
+        pcbnew.SaveBoard(board.GetFileName(), board)
+    else:
+        board.Save(board.GetFileName())

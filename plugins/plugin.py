@@ -4,7 +4,8 @@ import pcbnew  # type: ignore
 
 from .thread import ProcessThread
 from .events import StatusEvent
-from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT
+from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, ARCHIVE_PROJECT_OPT, OVERWRITE_ARCHIVE_OPT, STEP_EXPORT_OPT
+from .archive import normalize_index, get_project_archive_path
 from .utils import load_user_options, save_user_options, get_layer_names
 
 
@@ -15,7 +16,7 @@ class KiCadToJLCForm(wx.Frame):
             self,
             None,
             id=wx.ID_ANY,
-            title=u"Fabrication Toolkit",
+            title=u"Schienle_PCB_Freigabe",
             pos=wx.DefaultPosition,
             size=wx.DefaultSize,
             style=wx.DEFAULT_DIALOG_STYLE)
@@ -38,7 +39,23 @@ class KiCadToJLCForm(wx.Frame):
             EXCLUDE_DNP_OPT: False,
             OPEN_BROWSER_OPT: True,
             BACKUP_OPT: True,
+            INDEX_OPT: "",
+            SET_REVISION_OPT: True,
+            ARCHIVE_PROJECT_OPT: True,
+            STEP_EXPORT_OPT: True,
         })
+
+        self.mIndexLabel = wx.StaticText(self, label='Index:')
+        self.mIndexControl = wx.TextCtrl(self, size=wx.Size(600, 50))
+        self.mIndexControl.Hint = "Index (e.g. A, B, 01) [required for project archive]"
+        self.mIndexControl.SetValue(userOptions[INDEX_OPT] or pcbnew.GetBoard().GetTitleBlock().GetRevision())
+        self.mSetRevisionCheckbox = wx.CheckBox(self, label='Write index to title block revision (saves the board)')
+        self.mSetRevisionCheckbox.SetValue(userOptions[SET_REVISION_OPT])
+        self.mArchiveProjectCheckbox = wx.CheckBox(self, label='Archive project with index')
+        self.mArchiveProjectCheckbox.SetValue(userOptions[ARCHIVE_PROJECT_OPT])
+
+        self.mStepExportCheckbox = wx.CheckBox(self, label='Export 3D model (STEP)')
+        self.mStepExportCheckbox.SetValue(userOptions[STEP_EXPORT_OPT])
 
         self.mOptionsLabel = wx.StaticText(self, label='Options:')
         # self.mOptionsSeparator = wx.StaticLine(self)
@@ -80,6 +97,11 @@ class KiCadToJLCForm(wx.Frame):
 
         boxSizer = wx.BoxSizer(wx.VERTICAL)
 
+        boxSizer.Add(self.mIndexLabel, 0, wx.ALL, 5)
+        boxSizer.Add(self.mIndexControl, 0, wx.ALL, 5)
+        boxSizer.Add(self.mSetRevisionCheckbox, 0, wx.ALL, 5)
+        boxSizer.Add(self.mArchiveProjectCheckbox, 0, wx.ALL, 5)
+        boxSizer.Add(self.mStepExportCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mOptionsLabel, 0, wx.ALL, 5)
         # boxSizer.Add(self.mOptionsSeparator, 0, wx.ALL, 5)
         boxSizer.Add(self.mArchiveNameControl, 0, wx.ALL, 5)
@@ -113,6 +135,10 @@ class KiCadToJLCForm(wx.Frame):
 
     def onGenerateButtonClick(self, event):
         options = dict()
+        options[INDEX_OPT] = self.mIndexControl.GetValue().strip()
+        options[SET_REVISION_OPT] = self.mSetRevisionCheckbox.GetValue()
+        options[ARCHIVE_PROJECT_OPT] = self.mArchiveProjectCheckbox.GetValue()
+        options[STEP_EXPORT_OPT] = self.mStepExportCheckbox.GetValue()
         options[ARCHIVE_NAME] = self.mArchiveNameControl.GetValue()
         options[EXTRA_LAYERS] = self.mAdditionalLayersControl.GetValue()
         options[ALL_ACTIVE_LAYERS_OPT] = self.mAllActiveLayersCheckbox.GetValue()
@@ -124,8 +150,28 @@ class KiCadToJLCForm(wx.Frame):
         options[OPEN_BROWSER_OPT] = self.mOpenBrowserCheckbox.GetValue()
         options[BACKUP_OPT] = self.mBackupCheckbox.GetValue()
 
-        save_user_options(options)
+        if not normalize_index(options[INDEX_OPT]) and (options[SET_REVISION_OPT] or options[ARCHIVE_PROJECT_OPT]):
+            wx.MessageBox("Please enter an index.", "Schienle_PCB_Freigabe", wx.OK | wx.ICON_WARNING)
+            self.mIndexControl.SetFocus()
+            return
 
+        options[OVERWRITE_ARCHIVE_OPT] = False
+        if options[ARCHIVE_PROJECT_OPT]:
+            archive_path = get_project_archive_path(pcbnew.GetBoard().GetFileName(), options[INDEX_OPT])
+            if os.path.exists(archive_path):
+                answer = wx.MessageBox("A project archive for index '{}' already exists:\n{}\n\nOverwrite it?".format(options[INDEX_OPT], archive_path),
+                                       "Schienle_PCB_Freigabe", wx.YES_NO | wx.ICON_QUESTION)
+                if answer != wx.YES:
+                    return
+                options[OVERWRITE_ARCHIVE_OPT] = True
+
+        save_user_options({k: v for k, v in options.items() if k != OVERWRITE_ARCHIVE_OPT})
+
+        self.mIndexLabel.Hide()
+        self.mIndexControl.Hide()
+        self.mSetRevisionCheckbox.Hide()
+        self.mArchiveProjectCheckbox.Hide()
+        self.mStepExportCheckbox.Hide()
         self.mOptionsLabel.Hide()
         self.mArchiveNameControl.Hide()
         self.mAdditionalLayersControl.Hide()
@@ -141,14 +187,14 @@ class KiCadToJLCForm(wx.Frame):
         self.mGaugeStatus.Show()
 
         self.Fit()
-        self.SetTitle('Fabrication Toolkit (Processing...)')
+        self.SetTitle('Schienle_PCB_Freigabe (Processing...)')
 
         StatusEvent.invoke(self, self.updateDisplay)
         ProcessThread(self, options, openBrowser=options[OPEN_BROWSER_OPT])
 
     def updateDisplay(self, status):
         if status.data == -1:
-            self.SetTitle('Fabrication Toolkit (Done!)')
+            self.SetTitle('Schienle_PCB_Freigabe (Done!)')
             pcbnew.Refresh()
             self.Destroy()
         else:
@@ -158,13 +204,13 @@ class KiCadToJLCForm(wx.Frame):
 # Plugin definition
 class Plugin(pcbnew.ActionPlugin):
     def __init__(self):
-        self.name = "Fabrication Toolkit"
+        self.name = "Schienle_PCB_Freigabe"
         self.category = "Manufacturing"
-        self.description = "Toolkit for automating PCB fabrication process with KiCad and JLC PCB"
+        self.description = "PCB-Freigabe: Fertigungsdaten erstellen, Index setzen und Projekt archivieren"
         self.pcbnew_icon_support = hasattr(self, "show_toolbar_button")
         self.show_toolbar_button = True
         self.icon_file_name = os.path.join(os.path.dirname(__file__), 'icon.png')
-        self.dark_icon_file_name = os.path.join(os.path.dirname(__file__), 'icon.png')
+        self.dark_icon_file_name = os.path.join(os.path.dirname(__file__), 'icon_dark.png')
 
     def Run(self):
         KiCadToJLCForm().Show()

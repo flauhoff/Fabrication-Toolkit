@@ -9,9 +9,11 @@ import logging
 from threading import Thread
 from .events import StatusEvent
 from .process import ProcessManager
+from .archive import archive_project, normalize_index, get_index_folder_name
+from .step import export_step, stepFileName
 from .config import *
 from .options import *
-from .utils import print_cli_progress_bar
+from .utils import print_cli_progress_bar, save_board
 
 
 class ProcessThread(Thread):
@@ -27,7 +29,7 @@ class ProcessThread(Thread):
             try:
                 self.board = pcbnew.LoadBoard(cli)
             except Exception as e:
-                logging.error("Fabrication Toolkit - Error" + str(e))
+                logging.error("Schienle_PCB_Freigabe - Error" + str(e))
                 return
         else:
             self.board = None
@@ -50,6 +52,7 @@ class ProcessThread(Thread):
             "REVISION": titleBlock.GetRevision(),
             "TITLE": titleBlock.GetTitle(),
             "COMPANY": titleBlock.GetCompany(),
+            "INDEX": self.options.get(INDEX_OPT) or "",
         }
 
         for comment_index in range(9):
@@ -74,9 +77,17 @@ class ProcessThread(Thread):
         os.makedirs(temp_dir_gerber)
 
         _, temp_file = tempfile.mkstemp()
-        project_directory = os.path.dirname(self.process_manager.board.GetFileName())
+        board_file = self.process_manager.board.GetFileName()
+        project_directory = os.path.dirname(board_file)
+        index = normalize_index(self.options.get(INDEX_OPT))
 
         try:
+            # Write the index into the title block (revision) before plotting, so that
+            # ${REVISION} on the board (e.g. silkscreen) already shows the new index
+            if index and self.options.get(SET_REVISION_OPT):
+                self.process_manager.board.GetTitleBlock().SetRevision(self.options[INDEX_OPT].strip())
+                save_board(self.process_manager.board)
+
             # Verify all zones are up-to-date
             self.progress(10)
             if (self.options[AUTO_FILL_OPT]):
@@ -107,6 +118,17 @@ class ProcessThread(Thread):
             self.progress(70)
             self.process_manager.generate_bom(temp_dir)
 
+            # export 3D model (uses the saved board file, see README)
+            if self.options.get(STEP_EXPORT_OPT):
+                self.progress(75)
+                try:
+                    export_step(board_file, os.path.join(temp_dir, stepFileName))
+                except Exception as e:
+                    if self.wx is None:
+                        logging.error("Schienle_PCB_Freigabe - STEP export error: " + str(e))
+                    else:
+                        wx.MessageBox(str(e), "Schienle_PCB_Freigabe - STEP export error", wx.OK | wx.ICON_ERROR)
+
             # generate production archive
             self.progress(85)
             temp_file = self.process_manager.generate_archive(temp_dir_gerber, temp_file)
@@ -115,9 +137,9 @@ class ProcessThread(Thread):
             temp_file = os.path.join(temp_dir, os.path.basename(temp_file))
         except Exception as e:
             if self.wx is None:
-                logging.error("Fabrication Toolkit - Error" + str(e))
+                logging.error("Schienle_PCB_Freigabe - Error" + str(e))
             else:
-                wx.MessageBox(str(e), "Fabrication Toolkit - Error", wx.OK | wx.ICON_ERROR)
+                wx.MessageBox(str(e), "Schienle_PCB_Freigabe - Error", wx.OK | wx.ICON_ERROR)
             self.progress(-1)
             return
 
@@ -150,17 +172,24 @@ class ProcessThread(Thread):
         # make output dir
         filename = os.path.splitext(os.path.basename(self.process_manager.board.GetFileName()))[0]
         output_path = os.path.join(project_directory, outputFolder)
+        if index:
+            output_path = os.path.join(output_path, get_index_folder_name(index))
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         
         # rename gerber archive
         if self.options[ARCHIVE_NAME]:
             baseName = self.expandTextVariables(self.options[ARCHIVE_NAME])
+        elif index:
+            baseName = "{} {}".format(title or filename, get_index_folder_name(index))
         else:
             baseName = "{} {}".format(title or filename, revision or '')
 
         gerberArchiveName = ProcessManager.normalize_filename("_".join((baseName.strip() + '.zip').split()))
         os.rename(temp_file, os.path.join(temp_dir, gerberArchiveName))
+
+        if os.path.exists(os.path.join(temp_dir, stepFileName)):
+            os.rename(os.path.join(temp_dir, stepFileName), os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + '.step').split()))))
 
         if self.options[ARCHIVE_NAME]:
             if os.path.exists(os.path.join(temp_dir, designatorsFileName)):
@@ -185,6 +214,17 @@ class ProcessThread(Thread):
         except Exception as e:
             if self.openBrowser:
                 webbrowser.open("file://%s" % (temp_dir))
+
+        # archive the complete project (incl. the production data of this index)
+        if index and self.options.get(ARCHIVE_PROJECT_OPT):
+            self.progress(98)
+            try:
+                archive_project(board_file, index, outputFolder, overwrite=self.options.get(OVERWRITE_ARCHIVE_OPT, False))
+            except Exception as e:
+                if self.wx is None:
+                    logging.error("Schienle_PCB_Freigabe - Archive error: " + str(e))
+                else:
+                    wx.MessageBox(str(e), "Schienle_PCB_Freigabe - Archive error", wx.OK | wx.ICON_ERROR)
 
         if self.wx is None: 
             self.progress(100)

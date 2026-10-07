@@ -1,3 +1,13 @@
+<img src="assets/schienle-logo.png" alt="Schienle Magnettechnik" height=100>
+
+# Schienle_PCB_Freigabe
+
+KiCad-Plugin fuer die PCB-Freigabe: Index eingeben, Fertigungsdaten erstellen und das Projekt mit Index-Bezeichnung archivieren (siehe [Release workflow (Index)](#release-workflow-index)).
+
+Autor: Schienle. Basiert auf dem [Fabrication Toolkit](https://github.com/bennymeg/Fabrication-Toolkit) von Benny Megidish (Apache-2.0); die folgende Dokumentation stammt grossteils aus dem Original.
+
+---
+
 <img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/assets/logo.svg?raw=true"
     style="display:block margin-left: auto; margin-right: auto;" alt="JLC PCB Plug-in for KiCad">
 
@@ -38,6 +48,18 @@ Click on the Fabrication Toolkit <img src="https://github.com/bennymeg/JLC-Plugi
 Options can be set in the dialog that appears when the plugin is invoked. They are saved in a file called `fabrication-toolkit-options.json` in the project directory so that they are remembered between invocations of the plugin.
 
 <img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/assets/options.png?raw=true" height=275>
+
+### Release workflow (Index)
+
+☑ __Index__: Index of this release (e.g. `A`, `B`, `01`). Available as text variable `${INDEX}` in the archive name.</br>
+☑ __Write index to title block revision__: Sets the board's title block revision to the index and saves the board *before* plotting, so `${REVISION}` on the PCB already shows the new index.</br>
+☑ __Archive project with index__: After generating the fabrication data, the complete project directory is zipped to `archive/<project>_Index_<INDEX>.zip`. It contains schematics, board, project libraries, 3D models etc. plus the production data of this index. Other indices, backups, lock files, `fp-info-cache` and VCS folders are excluded. An existing archive of the same index is only overwritten after confirmation.</br>
+
+☑ __Export 3D model (STEP)__: Exports the board incl. component models as `<Title>_Index_<INDEX>.step` next to the fabrication data (and therefore also into the project archive). Uses `kicad-cli` (KiCad 7+) on the **saved** board file, so save the board first (it is saved automatically when the index is written to the title block).</br>
+
+When an index is set, the fabrication data is written to `production/Index_<INDEX>/` instead of `production/`, so every index keeps its own data set.
+
+### Fabrication options
 
 ☑ __Archive name__: Name of the archive file to be generated. Can include text variables, such as e.g. `${TITLE}_${REVISION}`</br>
 ☑ __Additional layers__: Comma-separated list of additional layers to include in the gerber archive.</br>
@@ -193,7 +215,7 @@ All the options from the GUI are also available via the cli interface:
 ```
 python3 -m plugins.cli -h
 
-usage: Fabrication Toolkit [-h] --path PATH [--additionalLayers LAYERS] [--user1VCut] [--user2AltVCut]
+usage: Schienle_PCB_Freigabe [-h] --path PATH [--additionalLayers LAYERS] [--user1VCut] [--user2AltVCut]
                            [--autoTranslate] [--autoFill] [--excludeDNP] [--allActiveLayers] [--archiveName NAME]
                            [--openBrowser] [--noBackup]
 
@@ -215,14 +237,28 @@ options:
                         Name of the generated archives
   --openBrowser, -b     Open web browser with directory file overview after generation
   --noBackup, -nB       Do not create a backup of the project before generation
+  --index INDEX, -i INDEX
+                        Index of this release (e.g. A, B, 01)
+  --setRevision, -sR    Write the index into the title block revision and save the board
+  --archiveProject, -aP Archive the complete project as archive/<project>_Index_<INDEX>.zip
+  --overwriteArchive, -oA
+                        Overwrite an existing project archive of the same index
+  --stepExport, -st     Export the 3D model as STEP (requires KiCad 7+)
+```
+
+Complete release of index `B`:
+```
+python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -i B -sR -aP -st -f -nI
 ```
 
 ### Notes
 
 - On windows the commands have to be run inside the `KiCad Command Prompt`. Moreover, instead of `python3` they are run with a simple `python` in front.
 - If the CLI should be used with the installed plugin, `plugins.cli` has to be replaced with the package name. In a jobset it would look like this:
-  `python -m "${KICAD9_3RD_PARTY}plugins/com_github_bennymeg_JLC-Plugin-for-KiCad.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb"`
+  `python -m "${KICAD9_3RD_PARTY}plugins/com_schienle_Schienle_PCB_Freigabe.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb"`
 
 ## Author
 
-Benny Megidish
+Schienle
+
+Original Fabrication Toolkit: Benny Megidish

@@ -1,36 +1,35 @@
 {
     "$schema": "https://go.kicad.org/pcm/schemas/v1",
-    "name": "Fabrication Toolkit",
-    "description": "JLC PCB fabrication toolkit",
-    "description_full": "Toolkit for automating PCB fabrication process with KiCad and JLC PCB. \n\n Features: \n\u2022 Generates gerber files in correct format for production. \n\u2022 Generates BOM file in correct format for production. \n\u2022 Generates Pick and Place file in correct format for assembly. \n\u2022 Automatic and manual component translations. \n\u2022 Many more unique additional features. \n\u2665 https://github.com/sponsors/bennymeg",
-    "identifier": "com.github.bennymeg.JLC-Plugin-for-KiCad",
+    "name": "Schienle_PCB_Freigabe",
+    "description": "PCB-Freigabe mit Index und Projektarchiv",
+    "description_full": "Freigabe-Workflow fuer KiCad-Projekte. \n\n Features: \n• Eingabe eines Index, der in die Revision des Schriftfelds uebernommen wird. \n• Erstellt Fertigungsdaten (Gerber, Bohrdaten, BOM, Bestueckungsliste) pro Index. \n• Archiviert das komplette Projekt mit Index-Bezeichnung. \n\nBasiert auf dem Fabrication Toolkit von Benny Megidish (Apache-2.0): https://github.com/bennymeg/Fabrication-Toolkit",
+    "identifier": "com.schienle.Schienle_PCB_Freigabe",
     "type": "plugin",
     "author": {
-        "name": "Benny Megidish",
+        "name": "Schienle",
         "contact": {
-            "web": "https://github.com/bennymeg/Fabrication-Toolkit"
+            "web": "https://github.com/flauhoff/fabrication-toolkit"
         }
     },
     "maintainer": {
-        "name": "Benny Megidish",
+        "name": "Schienle",
         "contact": {
-            "web": "https://github.com/bennymeg/Fabrication-Toolkit"
+            "web": "https://github.com/flauhoff/fabrication-toolkit"
         }
     },
     "license": "Apache-2.0",
     "resources": {
-        "homepage": "https://github.com/bennymeg/Fabrication-Toolkit",
-        "Sponsor": "https://github.com/sponsors/bennymeg"
+        "homepage": "https://github.com/flauhoff/fabrication-toolkit"
     },
     "tags": [
-        "jlc",
         "production",
         "fabrication",
-        "toolkit"
+        "release",
+        "archive"
     ],
     "versions": [
         {
-            "version": "5.3.1",
+            "version": "1.0.0",
             "status": "stable",
             "kicad_version": "6.00"
         }
