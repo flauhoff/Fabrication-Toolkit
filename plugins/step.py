@@ -6,14 +6,41 @@ import subprocess
 stepFileName = 'board.step'
 
 
+def _pcbnew_location():
+    try:
+        import pcbnew  # type: ignore
+        return pcbnew.__file__
+    except Exception:
+        return None
+
+
+def _macos_bundle_candidates(paths):
+    '''Returns <bundle>.app/Contents/MacOS/kicad-cli for every .app bundle found in the given paths.'''
+    candidates = []
+    for path in paths:
+        if not path:
+            continue
+        path = os.path.realpath(path)
+        while path and path != os.path.dirname(path):
+            if path.endswith('.app'):
+                candidates.append(os.path.join(path, 'Contents', 'MacOS', 'kicad-cli'))
+            path = os.path.dirname(path)
+    return candidates
+
+
 def find_kicad_cli():
     '''Locates the kicad-cli executable of the running KiCad installation (KiCad 7+).'''
     exe = 'kicad-cli.exe' if sys.platform == 'win32' else 'kicad-cli'
     candidates = [
         # Windows: KiCad's bundled python.exe lives next to kicad-cli.exe in KiCad\<ver>\bin
         os.path.join(os.path.dirname(sys.executable), exe),
-        # macOS: python runs from inside the KiCad.app bundle
+    ]
+
+    # macOS: python and pcbnew run from inside the KiCad.app bundle, wherever it is installed
+    candidates += _macos_bundle_candidates([sys.executable, _pcbnew_location()])
+    candidates += [
         '/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli',
+        os.path.expanduser('~/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli'),
     ]
 
     for candidate in candidates:
