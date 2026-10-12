@@ -18,6 +18,7 @@ SECTIONS = [
     ]),
     ('LEITERPLATTE', [
         ('dicke', 'Leiterplattendicke [mm]', ['0.8', '1.0', '1.2', '1.6', '2.0'], ''),
+        ('kupferdicke', 'Kupferdicke [µm]', ['70', '35'], '70'),
         ('materialtyp', 'Materialtyp', ['FR4 TG135', 'FR4 TG150', 'FR4 TG170'], 'FR4 TG135'),
         ('oberflaeche', 'Oberfläche', ['HAL bleifrei', 'chem. Gold (ENIG)', 'chem. Zinn', 'OSP'], 'HAL bleifrei'),
         ('loetstopp', 'Lötstopplack (Farbe)', ['grün', 'schwarz', 'blau', 'rot', 'weiß', 'gelb'], 'grün'),
