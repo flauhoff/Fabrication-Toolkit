@@ -6,98 +6,78 @@ import zipfile
 
 from .debuglog import logFileName
 
-archiveFolder = 'archive'
+# All releases are created in <project>/Freigaben/<drawing number>_<index>/
+releaseFolder = 'Freigaben'
+gerberFolder = 'Gerberdaten'
 
-# Files and folders that never belong into a project archive
-excludedDirNames = {'.git', '.svn', '.hg', '__pycache__', '.history', archiveFolder}
+# Files and folders that never belong into a project backup
+excludedDirNames = {'.git', '.svn', '.hg', '__pycache__', '.history'}
+excludedTopLevelDirNames = {releaseFolder, 'production', 'archive'}
 excludedFileNames = {'fp-info-cache', '.DS_Store', 'Thumbs.db', logFileName}
 excludedFileSuffixes = ('.lck', '.pyc', '.bak')
 excludedFilePrefixes = ('_autosave-', '~')
 
 
-def normalize_index(index):
-    '''Turns a user supplied index (e.g. "A", "01", "Rev 2") into a filename safe token.'''
-    index = (index or '').strip()
-    index = re.sub(r'[^\w\s\.\-]', '', index)
-    return '_'.join(index.split())
+def normalize_name(value):
+    '''Turns a user supplied drawing number / index (e.g. "4711-02", "A") into a filename safe token.'''
+    value = (value or '').strip()
+    value = re.sub(r'[^\w\s\.\-]', '', value)
+    return '_'.join(value.split())
 
 
-def get_index_folder_name(index):
-    return 'Index_{}'.format(normalize_index(index))
+def get_release_name(drawing_number, index):
+    '''e.g. ("4711-02", "B") -> "4711-02_B"'''
+    return '{}_{}'.format(normalize_name(drawing_number), normalize_name(index))
 
 
-def get_project_archive_path(board_file, index):
-    '''Returns the path of the project archive for the given board file and index.'''
+def get_release_path(board_file, drawing_number, index):
     project_directory = os.path.dirname(os.path.abspath(board_file))
-    project_name = os.path.splitext(os.path.basename(board_file))[0]
-    archive_name = '{}_{}.zip'.format(project_name, get_index_folder_name(index))
-    return os.path.join(project_directory, archiveFolder, archive_name)
+    return os.path.join(project_directory, releaseFolder, get_release_name(drawing_number, index))
 
 
-def _is_excluded_dir(rel_dir, name, production_folder, index_folder):
+def _is_excluded_dir(rel_dir, name):
     if name in excludedDirNames or name.endswith('-backups'):
         return True
-
-    # Only keep the production data of the archived index
-    if rel_dir == '.' and name == production_folder:
-        return False
-    if rel_dir == production_folder and name != index_folder:
+    if rel_dir == '.' and name in excludedTopLevelDirNames:
         return True
-
     return False
 
 
-def _is_excluded_file(rel_dir, name, production_folder):
+def _is_excluded_file(name):
     if name in excludedFileNames:
         return True
-    if name.endswith(excludedFileSuffixes) or name.startswith(excludedFilePrefixes):
-        return True
-
-    # Skip loose files directly inside the production folder (legacy, non-indexed outputs)
-    if rel_dir == production_folder:
-        return True
-
-    return False
+    return name.endswith(excludedFileSuffixes) or name.startswith(excludedFilePrefixes)
 
 
-def archive_project(board_file, index, production_folder, overwrite=False):
+def backup_project(project_directory, archive_path):
     '''
-    Archives the complete KiCad project (schematics, board, libraries, 3D models, ...) that
-    contains the given board file into `<project>/archive/<project>_Index_<index>.zip`.
-    The production data of the given index is included, other indices and backups are not.
-    Returns the path of the created archive.
+    Zips the complete KiCad project directory (schematics, board, libraries, 3D models, ...)
+    into archive_path. Releases, old production outputs, backups, lock files and VCS folders
+    are left out. Returns the number of archived files.
     '''
-    if not normalize_index(index):
-        raise ValueError('An index is required to archive the project.')
-
-    project_directory = os.path.dirname(os.path.abspath(board_file))
-    archive_path = get_project_archive_path(board_file, index)
-    index_folder = get_index_folder_name(index)
-
-    if os.path.exists(archive_path) and not overwrite:
-        raise FileExistsError('Project archive for index "{}" already exists:\n{}'.format(index, archive_path))
-
-    os.makedirs(os.path.dirname(archive_path), exist_ok=True)
+    project_directory = os.path.abspath(project_directory)
+    os.makedirs(os.path.dirname(os.path.abspath(archive_path)), exist_ok=True)
 
     # Write to a temporary file first, so that a failed run never leaves a broken archive behind
     fd, temp_path = tempfile.mkstemp(suffix='.zip')
     os.close(fd)
+    count = 0
 
     try:
         with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as zf:
             for root, dirs, files in os.walk(project_directory):
                 rel_dir = os.path.relpath(root, project_directory)
-                dirs[:] = sorted(d for d in dirs if not _is_excluded_dir(rel_dir, d, production_folder, index_folder))
+                dirs[:] = sorted(d for d in dirs if not _is_excluded_dir(rel_dir, d))
 
                 for name in sorted(files):
-                    if _is_excluded_file(rel_dir, name, production_folder):
+                    if _is_excluded_file(name):
                         continue
-                    path = os.path.join(root, name)
-                    zf.write(path, os.path.normpath(os.path.join(rel_dir, name)))
+                    zf.write(os.path.join(root, name), os.path.normpath(os.path.join(rel_dir, name)))
+                    count += 1
 
         shutil.move(temp_path, archive_path)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-    return archive_path
+    return count

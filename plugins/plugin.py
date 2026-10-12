@@ -4,8 +4,8 @@ import pcbnew  # type: ignore
 
 from .thread import ProcessThread
 from .events import StatusEvent
-from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, ARCHIVE_PROJECT_OPT, OVERWRITE_ARCHIVE_OPT, STEP_EXPORT_OPT
-from .archive import normalize_index, get_project_archive_path
+from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, STEP_EXPORT_OPT, DRAWING_NO_OPT, SCHEMATIC_PDF_OPT, PROJECT_BACKUP_OPT, OVERWRITE_RELEASE_OPT
+from .archive import normalize_name, get_release_name, get_release_path
 from .utils import load_user_options, save_user_options, get_layer_names, save_board
 from .debuglog import get_logger
 
@@ -40,23 +40,31 @@ class KiCadToJLCForm(wx.Frame):
             EXCLUDE_DNP_OPT: False,
             OPEN_BROWSER_OPT: True,
             BACKUP_OPT: True,
+            DRAWING_NO_OPT: "",
             INDEX_OPT: "",
             SET_REVISION_OPT: True,
-            ARCHIVE_PROJECT_OPT: True,
             STEP_EXPORT_OPT: True,
+            SCHEMATIC_PDF_OPT: True,
+            PROJECT_BACKUP_OPT: True,
         })
 
-        self.mIndexLabel = wx.StaticText(self, label='Index:')
+        self.mIndexLabel = wx.StaticText(self, label='Release (Freigabe) - drawing number + index:')
+        self.mDrawingNoControl = wx.TextCtrl(self, size=wx.Size(600, 50))
+        self.mDrawingNoControl.Hint = "Drawing number (Zeichnungsnummer)"
+        self.mDrawingNoControl.SetValue(userOptions[DRAWING_NO_OPT])
         self.mIndexControl = wx.TextCtrl(self, size=wx.Size(600, 50))
-        self.mIndexControl.Hint = "Index (e.g. A, B, 01) [required for project archive]"
+        self.mIndexControl.Hint = "Index (e.g. A, B, 01)"
         self.mIndexControl.SetValue(userOptions[INDEX_OPT] or pcbnew.GetBoard().GetTitleBlock().GetRevision())
         self.mSetRevisionCheckbox = wx.CheckBox(self, label='Write index to title block revision (saves the board)')
         self.mSetRevisionCheckbox.SetValue(userOptions[SET_REVISION_OPT])
-        self.mArchiveProjectCheckbox = wx.CheckBox(self, label='Archive project with index')
-        self.mArchiveProjectCheckbox.SetValue(userOptions[ARCHIVE_PROJECT_OPT])
-
         self.mStepExportCheckbox = wx.CheckBox(self, label='Export 3D model (STEP)')
         self.mStepExportCheckbox.SetValue(userOptions[STEP_EXPORT_OPT])
+        self.mSchematicPdfCheckbox = wx.CheckBox(self, label='Export schematic as PDF')
+        self.mSchematicPdfCheckbox.SetValue(userOptions[SCHEMATIC_PDF_OPT])
+        self.mProjectBackupCheckbox = wx.CheckBox(self, label='Create project backup')
+        self.mProjectBackupCheckbox.SetValue(userOptions[PROJECT_BACKUP_OPT])
+        self.mReleaseControls = [self.mIndexLabel, self.mDrawingNoControl, self.mIndexControl, self.mSetRevisionCheckbox,
+                                 self.mStepExportCheckbox, self.mSchematicPdfCheckbox, self.mProjectBackupCheckbox]
 
         self.mOptionsLabel = wx.StaticText(self, label='Options:')
         # self.mOptionsSeparator = wx.StaticLine(self)
@@ -101,11 +109,8 @@ class KiCadToJLCForm(wx.Frame):
 
         boxSizer = wx.BoxSizer(wx.VERTICAL)
 
-        boxSizer.Add(self.mIndexLabel, 0, wx.ALL, 5)
-        boxSizer.Add(self.mIndexControl, 0, wx.ALL, 5)
-        boxSizer.Add(self.mSetRevisionCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mArchiveProjectCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mStepExportCheckbox, 0, wx.ALL, 5)
+        for control in self.mReleaseControls:
+            boxSizer.Add(control, 0, wx.ALL, 5)
         boxSizer.Add(self.mOptionsLabel, 0, wx.ALL, 5)
         # boxSizer.Add(self.mOptionsSeparator, 0, wx.ALL, 5)
         boxSizer.Add(self.mArchiveNameControl, 0, wx.ALL, 5)
@@ -140,10 +145,12 @@ class KiCadToJLCForm(wx.Frame):
 
     def onGenerateButtonClick(self, event):
         options = dict()
+        options[DRAWING_NO_OPT] = self.mDrawingNoControl.GetValue().strip()
         options[INDEX_OPT] = self.mIndexControl.GetValue().strip()
         options[SET_REVISION_OPT] = self.mSetRevisionCheckbox.GetValue()
-        options[ARCHIVE_PROJECT_OPT] = self.mArchiveProjectCheckbox.GetValue()
         options[STEP_EXPORT_OPT] = self.mStepExportCheckbox.GetValue()
+        options[SCHEMATIC_PDF_OPT] = self.mSchematicPdfCheckbox.GetValue()
+        options[PROJECT_BACKUP_OPT] = self.mProjectBackupCheckbox.GetValue()
         options[ARCHIVE_NAME] = self.mArchiveNameControl.GetValue()
         options[EXTRA_LAYERS] = self.mAdditionalLayersControl.GetValue()
         options[ALL_ACTIVE_LAYERS_OPT] = self.mAllActiveLayersCheckbox.GetValue()
@@ -155,28 +162,28 @@ class KiCadToJLCForm(wx.Frame):
         options[OPEN_BROWSER_OPT] = self.mOpenBrowserCheckbox.GetValue()
         options[BACKUP_OPT] = self.mBackupCheckbox.GetValue()
 
-        if not normalize_index(options[INDEX_OPT]) and (options[SET_REVISION_OPT] or options[ARCHIVE_PROJECT_OPT]):
-            wx.MessageBox("Please enter an index.", "Schienle_PCB_Freigabe", wx.OK | wx.ICON_WARNING)
-            self.mIndexControl.SetFocus()
+        # a release needs both; without them the original Fabrication Toolkit output is created
+        has_drawing_no = bool(normalize_name(options[DRAWING_NO_OPT]))
+        has_index = bool(normalize_name(options[INDEX_OPT]))
+        if has_drawing_no != has_index:
+            wx.MessageBox("For a release please enter both drawing number and index.", "Schienle_PCB_Freigabe", wx.OK | wx.ICON_WARNING)
+            (self.mIndexControl if has_drawing_no else self.mDrawingNoControl).SetFocus()
             return
 
-        options[OVERWRITE_ARCHIVE_OPT] = False
-        if options[ARCHIVE_PROJECT_OPT]:
-            archive_path = get_project_archive_path(pcbnew.GetBoard().GetFileName(), options[INDEX_OPT])
-            if os.path.exists(archive_path):
-                answer = wx.MessageBox("A project archive for index '{}' already exists:\n{}\n\nOverwrite it?".format(options[INDEX_OPT], archive_path),
+        options[OVERWRITE_RELEASE_OPT] = False
+        if has_drawing_no and has_index:
+            release_path = get_release_path(pcbnew.GetBoard().GetFileName(), options[DRAWING_NO_OPT], options[INDEX_OPT])
+            if os.path.exists(release_path):
+                answer = wx.MessageBox("Release '{}' already exists:\n{}\n\nOverwrite it?".format(get_release_name(options[DRAWING_NO_OPT], options[INDEX_OPT]), release_path),
                                        "Schienle_PCB_Freigabe", wx.YES_NO | wx.ICON_QUESTION)
                 if answer != wx.YES:
                     return
-                options[OVERWRITE_ARCHIVE_OPT] = True
+                options[OVERWRITE_RELEASE_OPT] = True
 
-        save_user_options({k: v for k, v in options.items() if k != OVERWRITE_ARCHIVE_OPT})
+        save_user_options({k: v for k, v in options.items() if k != OVERWRITE_RELEASE_OPT})
 
-        self.mIndexLabel.Hide()
-        self.mIndexControl.Hide()
-        self.mSetRevisionCheckbox.Hide()
-        self.mArchiveProjectCheckbox.Hide()
-        self.mStepExportCheckbox.Hide()
+        for control in self.mReleaseControls:
+            control.Hide()
         self.mOptionsLabel.Hide()
         self.mArchiveNameControl.Hide()
         self.mAdditionalLayersControl.Hide()
@@ -193,7 +200,7 @@ class KiCadToJLCForm(wx.Frame):
         self.mStatusText.Show()
 
         # Board changes must happen in the GUI thread, not in the background thread
-        if normalize_index(options[INDEX_OPT]) and options[SET_REVISION_OPT]:
+        if has_index and options[SET_REVISION_OPT]:
             board = pcbnew.GetBoard()
             log = get_logger(os.path.dirname(board.GetFileName()))
             try:

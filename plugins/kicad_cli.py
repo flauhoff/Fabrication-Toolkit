@@ -51,16 +51,10 @@ def find_kicad_cli():
     if found:
         return found
 
-    raise FileNotFoundError('kicad-cli was not found. STEP export requires KiCad 7 or newer.')
+    raise FileNotFoundError('kicad-cli was not found. STEP / schematic PDF export requires KiCad 7 or newer.')
 
 
-def export_step(board_file, output_file, timeout=600, logger=None):
-    '''Exports the 3D model of the (saved) board file as STEP using kicad-cli.'''
-    cmd = [find_kicad_cli(), 'pcb', 'export', 'step',
-           '--subst-models',
-           '--output', output_file,
-           board_file]
-
+def _run(cmd, timeout, logger):
     if logger:
         logger.info('Running: %s', subprocess.list2cmdline(cmd))
 
@@ -74,12 +68,49 @@ def export_step(board_file, output_file, timeout=600, logger=None):
     except subprocess.TimeoutExpired as e:
         if logger:
             logger.error('kicad-cli timed out after %d s, output so far:\n%s', timeout, e.output)
-        raise RuntimeError('STEP export did not finish within {} s.'.format(timeout))
+        raise RuntimeError('kicad-cli did not finish within {} s.'.format(timeout))
 
+    output = (result.stdout or '').strip()
     if logger:
-        logger.info('kicad-cli exit code %d, output:\n%s', result.returncode, (result.stdout or '').strip())
+        logger.info('kicad-cli exit code %d, output:\n%s', result.returncode, output)
+    return result.returncode, output
 
-    if result.returncode != 0 or not os.path.isfile(output_file):
-        raise RuntimeError('STEP export failed (exit code {}):\n{}'.format(result.returncode, (result.stdout or '').strip()[-2000:]))
+
+def export_step(board_file, output_file, timeout=600, logger=None):
+    '''Exports the 3D model of the (saved) board file as STEP using kicad-cli.'''
+    cmd = [find_kicad_cli(), 'pcb', 'export', 'step',
+           '--subst-models',
+           '--output', output_file,
+           board_file]
+
+    returncode, output = _run(cmd, timeout, logger)
+    if returncode != 0 or not os.path.isfile(output_file):
+        raise RuntimeError('STEP export failed (exit code {}):\n{}'.format(returncode, output[-2000:]))
+
+    return output_file
+
+
+def export_schematic_pdf(schematic_file, output_file, variables=None, timeout=300, logger=None):
+    '''
+    Plots all sheets of the (saved) schematic into one PDF using kicad-cli.
+    `variables` are passed as text variables (e.g. ${INDEX} in the title block, KiCad 8+);
+    KiCad 7 does not know --define-var, so the export is retried without them.
+    '''
+    if not os.path.isfile(schematic_file):
+        raise FileNotFoundError('Schematic not found: {}'.format(schematic_file))
+
+    base = [find_kicad_cli(), 'sch', 'export', 'pdf', '--output', output_file]
+    defines = []
+    for key, value in (variables or {}).items():
+        defines += ['--define-var', '{}={}'.format(key, value)]
+
+    returncode, output = _run(base + defines + [schematic_file], timeout, logger)
+    if returncode != 0 and defines:
+        if logger:
+            logger.info('Retrying schematic export without --define-var (KiCad 7)')
+        returncode, output = _run(base + [schematic_file], timeout, logger)
+
+    if returncode != 0 or not os.path.isfile(output_file):
+        raise RuntimeError('Schematic PDF export failed (exit code {}):\n{}'.format(returncode, output[-2000:]))
 
     return output_file

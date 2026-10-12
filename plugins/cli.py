@@ -20,15 +20,19 @@ if __name__ == '__main__':
     parser.add_argument("--openBrowser",        "-b",  action="store_true", help="Open webbrowser with directory file overview after generation")
     parser.add_argument("--nonInteractive",     "-nI" ,action="store_true", help="Run in non-Interactive mode. Useful in CI/CD environment.")
     parser.add_argument("--noBackup",           "-nB", action="store_true", help="Do not create backup files")
+    parser.add_argument("--drawingNumber",      "-dn", type=str, help="Drawing number (Zeichnungsnummer) of this release", metavar="NUMBER")
     parser.add_argument("--index",              "-i",  type=str, help="Index of this release (e.g. A, B, 01)", metavar="INDEX")
     parser.add_argument("--setRevision",        "-sR", action="store_true", help="Write the index into the title block revision and save the board")
-    parser.add_argument("--archiveProject",     "-aP", action="store_true", help="Archive the complete project as archive/<project>_Index_<INDEX>.zip")
-    parser.add_argument("--overwriteArchive",   "-oA", action="store_true", help="Overwrite an existing project archive of the same index")
     parser.add_argument("--stepExport",         "-st", action="store_true", help="Export the 3D model as STEP (requires KiCad 7+)")
+    parser.add_argument("--schematicPdf",       "-sp", action="store_true", help="Export the schematic as PDF (release only, requires KiCad 7+)")
+    parser.add_argument("--projectBackup",      "-pB", action="store_true", help="Add a zipped project backup to the release")
+    parser.add_argument("--overwrite",          "-o",  action="store_true", help="Overwrite an existing release with the same drawing number and index")
     args = parser.parse_args()
 
-    if (args.setRevision or args.archiveProject) and not args.index:
-        parser.error("--setRevision and --archiveProject require --index")
+    if bool(args.drawingNumber) != bool(args.index):
+        parser.error("a release requires both --drawingNumber and --index")
+    if args.setRevision and not args.index:
+        parser.error("--setRevision requires --index")
 
     options = dict()
     options[AUTO_TRANSLATE_OPT] = args.autoTranslate
@@ -42,8 +46,10 @@ if __name__ == '__main__':
     options[BACKUP_OPT] = not args.noBackup
     options[INDEX_OPT] = args.index
     options[SET_REVISION_OPT] = args.setRevision
-    options[ARCHIVE_PROJECT_OPT] = args.archiveProject
-    options[OVERWRITE_ARCHIVE_OPT] = args.overwriteArchive
+    options[DRAWING_NO_OPT] = args.drawingNumber
+    options[SCHEMATIC_PDF_OPT] = args.schematicPdf
+    options[PROJECT_BACKUP_OPT] = args.projectBackup
+    options[OVERWRITE_RELEASE_OPT] = args.overwrite
     options[STEP_EXPORT_OPT] = args.stepExport
     
     openBrowser = args.openBrowser

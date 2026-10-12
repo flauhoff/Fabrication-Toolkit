@@ -2,7 +2,7 @@
 
 # Schienle_PCB_Freigabe
 
-KiCad-Plugin fuer die PCB-Freigabe: Index eingeben, Fertigungsdaten erstellen und das Projekt mit Index-Bezeichnung archivieren (siehe [Release workflow (Index)](#release-workflow-index)).
+KiCad-Plugin fuer die PCB-Freigabe: Zeichnungsnummer und Index eingeben, Fertigungsdaten, STEP und Schaltplan-PDF erstellen und das Projekt zum Freigabezeitpunkt sichern (siehe [Release workflow (Freigabe)](#release-workflow-freigabe)).
 
 Autor: Schienle. Basiert auf dem [Fabrication Toolkit](https://github.com/bennymeg/Fabrication-Toolkit) von Benny Megidish (Apache-2.0); die folgende Dokumentation stammt grossteils aus dem Original.
 
@@ -49,17 +49,31 @@ Options can be set in the dialog that appears when the plugin is invoked. They a
 
 <img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/assets/options.png?raw=true" height=275>
 
-### Release workflow (Index)
+### Release workflow (Freigabe)
 
-☑ __Index__: Index of this release (e.g. `A`, `B`, `01`). Available as text variable `${INDEX}` in the archive name.</br>
+Enter **drawing number** (Zeichnungsnummer) and **index** to create a release. Without both, the plugin behaves like the original Fabrication Toolkit (output in `production/`).
+
+```
+<project>/Freigaben/
+└── <drawing number>_<index>/
+    ├── Gerberdaten/                         gerber + drill files (not zipped)
+    ├── <name>_bom.csv
+    ├── <name>_positions.csv
+    ├── <name>_designators.csv
+    ├── <name>_netlist.ipc
+    ├── <name>.step                          3D model
+    ├── <name>_Schaltplan.pdf                all schematic sheets
+    └── <name>_Projekt-Backup.zip            project at release time
+```
+
 ☑ __Write index to title block revision__: Sets the board's title block revision to the index and saves the board *before* plotting, so `${REVISION}` on the PCB already shows the new index.</br>
-☑ __Archive project with index__: After generating the fabrication data, the complete project directory is zipped to `archive/<project>_Index_<INDEX>.zip`. It contains schematics, board, project libraries, 3D models etc. plus the production data of this index. Other indices, backups, lock files, `fp-info-cache` and VCS folders are excluded. An existing archive of the same index is only overwritten after confirmation.</br>
+☑ __Export 3D model (STEP)__: Uses `kicad-cli` (KiCad 7+) on the **saved** board file.</br>
+☑ __Export schematic as PDF__: Plots `<project>.kicad_sch` (all sheets) with `kicad-cli` (KiCad 7+) from the **saved** schematic. On KiCad 8+ the text variables `${ZEICHNUNGSNUMMER}` and `${INDEX}` are available in the schematic (e.g. in the title block).</br>
+☑ __Create project backup__: Zips the complete project directory (schematics, board, libraries, 3D models, ...). `Freigaben/`, `production/`, backups, lock files, `fp-info-cache` and VCS folders are excluded.</br>
 
-☑ __Export 3D model (STEP)__: Exports the board incl. component models as `<Title>_Index_<INDEX>.step` next to the fabrication data (and therefore also into the project archive). Uses `kicad-cli` (KiCad 7+) on the **saved** board file, so save the board first (it is saved automatically when the index is written to the title block).</br>
+An existing release with the same drawing number and index is only overwritten after confirmation. Drawing number and index are remembered per project.
 
-When an index is set, the fabrication data is written to `production/Index_<INDEX>/` instead of `production/`, so every index keeps its own data set.
-
-__Debugging__: every run is logged with timestamps and the duration of each step to `schienle-pcb-freigabe.log` in the project directory (incl. KiCad version, options, the `kicad-cli` call and its output, and full error tracebacks). The current step is also shown in the dialog title, so a hanging step is visible immediately.
+__Debugging__: every run is logged with timestamps and the duration of each step to `schienle-pcb-freigabe.log` in the project directory (incl. KiCad version, options, the `kicad-cli` calls and their output, and full error tracebacks). The current step is also shown in the dialog title, so a hanging step is visible immediately.
 
 ### Fabrication options
 
@@ -239,18 +253,20 @@ options:
                         Name of the generated archives
   --openBrowser, -b     Open web browser with directory file overview after generation
   --noBackup, -nB       Do not create a backup of the project before generation
+  --drawingNumber NUMBER, -dn NUMBER
+                        Drawing number (Zeichnungsnummer) of this release
   --index INDEX, -i INDEX
                         Index of this release (e.g. A, B, 01)
   --setRevision, -sR    Write the index into the title block revision and save the board
-  --archiveProject, -aP Archive the complete project as archive/<project>_Index_<INDEX>.zip
-  --overwriteArchive, -oA
-                        Overwrite an existing project archive of the same index
   --stepExport, -st     Export the 3D model as STEP (requires KiCad 7+)
+  --schematicPdf, -sp   Export the schematic as PDF (release only, requires KiCad 7+)
+  --projectBackup, -pB  Add a zipped project backup to the release
+  --overwrite, -o       Overwrite an existing release with the same drawing number and index
 ```
 
-Complete release of index `B`:
+Complete release of drawing number `4711-02`, index `B`:
 ```
-python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -i B -sR -aP -st -f -nI
+python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -dn 4711-02 -i B -sR -st -sp -pB -f -nI
 ```
 
 ### Notes

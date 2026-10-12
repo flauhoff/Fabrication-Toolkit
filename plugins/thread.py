@@ -11,8 +11,8 @@ import traceback
 from threading import Thread
 from .events import StatusEvent
 from .process import ProcessManager
-from .archive import archive_project, normalize_index, get_index_folder_name
-from .step import export_step, stepFileName
+from .archive import backup_project, normalize_name, get_release_name, get_release_path, gerberFolder
+from .kicad_cli import export_step, export_schematic_pdf, stepFileName
 from .config import *
 from .options import *
 from .utils import print_cli_progress_bar, save_board
@@ -83,6 +83,7 @@ class ProcessThread(Thread):
             "TITLE": titleBlock.GetTitle(),
             "COMPANY": titleBlock.GetCompany(),
             "INDEX": self.options.get(INDEX_OPT) or "",
+            "ZEICHNUNGSNUMMER": self.options.get(DRAWING_NO_OPT) or "",
         }
 
         for comment_index in range(9):
@@ -120,10 +121,11 @@ class ProcessThread(Thread):
         temp_dir_gerber = temp_dir + "_g"
         os.makedirs(temp_dir_gerber)
 
-        _, temp_file = tempfile.mkstemp()
         board_file = self.process_manager.board.GetFileName()
         project_directory = os.path.dirname(board_file)
-        index = normalize_index(self.options.get(INDEX_OPT))
+        drawing_number = normalize_name(self.options.get(DRAWING_NO_OPT))
+        index = normalize_name(self.options.get(INDEX_OPT))
+        release = bool(drawing_number and index)
 
         try:
             # Write the index into the title block (revision) before plotting, so that
@@ -157,82 +159,141 @@ class ProcessThread(Thread):
             self.process_manager.generate_tables(temp_dir, self.options[AUTO_TRANSLATE_OPT], self.options[EXCLUDE_DNP_OPT])
 
             # generate pick and place file
-            self.step(60, 'Generating positions file')
+            self.step(55, 'Generating positions file')
             self.process_manager.generate_positions(temp_dir)
 
             # generate BOM file
-            self.step(70, 'Generating BOM')
+            self.step(60, 'Generating BOM')
             self.process_manager.generate_bom(temp_dir)
 
             # export 3D model (uses the saved board file, see README)
             if self.options.get(STEP_EXPORT_OPT):
-                self.step(75, 'Exporting STEP (kicad-cli, may take a few minutes)')
+                self.step(65, 'Exporting STEP (kicad-cli, may take a few minutes)')
                 try:
                     export_step(board_file, os.path.join(temp_dir, stepFileName), logger=self.log)
                 except Exception as e:
                     self.error('STEP export error', str(e))
 
-            # generate production archive
-            self.step(85, 'Creating gerber archive')
-            temp_file = self.process_manager.generate_archive(temp_dir_gerber, temp_file)
-            shutil.move(temp_file, temp_dir)
-            shutil.rmtree(temp_dir_gerber)
-            temp_file = os.path.join(temp_dir, os.path.basename(temp_file))
+            if release:
+                output_path = self._finish_release(temp_dir, temp_dir_gerber, board_file, project_directory, drawing_number, index)
+            else:
+                output_path = self._finish_default(temp_dir, temp_dir_gerber, project_directory)
         except Exception as e:
             self.log.error(traceback.format_exc())
             self.error('Error', str(e))
             self.progress(100 if self.wx is None else -1)
             return
+        finally:
+            for path in (temp_dir, temp_dir_gerber):
+                shutil.rmtree(path, ignore_errors=True)
 
-        self.step(88, 'Copying files to output folder')
+        self.step(99, 'Done, output: %s' % output_path)
+        if self.openBrowser:
+            webbrowser.open("file://%s" % (output_path))
 
-        # (the former "progress bar done animation" posted one GUI event per 10 bytes of the
-        # gerber archive, which floods the wx event queue on larger boards and freezes KiCad)
-        self.log.info('Gerber archive size: %.1f MB', os.path.getsize(temp_file) / 1e6)
+        if self.wx is None:
+            self.progress(100)
+        else:
+            self.progress(-1)
 
-        # generate gerber name
+    def _finish_release(self, temp_dir, temp_dir_gerber, board_file, project_directory, drawing_number, index):
+        '''
+        Release structure:
+            Freigaben/<drawing number>_<index>/
+                Gerberdaten/                      gerber + drill files (not zipped)
+                <name>_bom.csv, _positions.csv, _designators.csv, _netlist.ipc, .step
+                <name>_Schaltplan.pdf
+                <name>_Projekt-Backup.zip
+        '''
+        name = get_release_name(drawing_number, index)
+        release_path = get_release_path(board_file, drawing_number, index)
+        self.log.info('Release: %s', release_path)
+
+        if os.path.exists(release_path):
+            if not self.options.get(OVERWRITE_RELEASE_OPT):
+                raise FileExistsError('Release "{}" already exists:\n{}'.format(name, release_path))
+            self.log.info('Overwriting existing release')
+            shutil.rmtree(release_path)
+
+        # fabrication files with the release name
+        renames = {
+            netlistFileName: name + '_netlist.ipc',
+            designatorsFileName: name + '_designators.csv',
+            placementFileName: name + '_positions.csv',
+            bomFileName: name + '_bom.csv',
+            stepFileName: name + '.step',
+        }
+        for source, target in renames.items():
+            if os.path.exists(os.path.join(temp_dir, source)):
+                os.rename(os.path.join(temp_dir, source), os.path.join(temp_dir, target))
+
+        # gerber + drill files as plain folder
+        self.step(75, 'Copying gerber files')
+        shutil.copytree(temp_dir_gerber, os.path.join(temp_dir, gerberFolder))
+
+        # schematic PDF
+        if self.options.get(SCHEMATIC_PDF_OPT):
+            self.step(80, 'Exporting schematic PDF (kicad-cli)')
+            schematic_file = os.path.splitext(board_file)[0] + '.kicad_sch'
+            try:
+                export_schematic_pdf(schematic_file, os.path.join(temp_dir, name + '_Schaltplan.pdf'),
+                                     variables={'ZEICHNUNGSNUMMER': self.options[DRAWING_NO_OPT].strip(),
+                                                'INDEX': self.options[INDEX_OPT].strip()},
+                                     logger=self.log)
+            except Exception as e:
+                self.error('Schematic PDF error', str(e))
+
+        self.step(85, 'Copying files to release folder')
+        shutil.copytree(temp_dir, release_path)
+
+        # project backup at release time (Freigaben/ itself is excluded)
+        if self.options.get(PROJECT_BACKUP_OPT):
+            self.step(90, 'Creating project backup')
+            try:
+                backup_path = os.path.join(release_path, name + '_Projekt-Backup.zip')
+                count = backup_project(project_directory, backup_path)
+                self.log.info('Project backup: %s (%d files, %.1f MB)', backup_path, count, os.path.getsize(backup_path) / 1e6)
+            except Exception as e:
+                self.log.error(traceback.format_exc())
+                self.error('Project backup error', str(e))
+
+        return release_path
+
+    def _finish_default(self, temp_dir, temp_dir_gerber, project_directory):
+        '''Original Fabrication Toolkit behaviour: everything goes to production/, gerbers zipped.'''
+        self.step(80, 'Creating gerber archive')
+        _, temp_file = tempfile.mkstemp()
+        temp_file = self.process_manager.generate_archive(temp_dir_gerber, temp_file)
+        temp_file = shutil.move(temp_file, temp_dir)
+
         title_block = self.process_manager.board.GetTitleBlock()
         title = title_block.GetTitle()
         revision = title_block.GetRevision()
-        company = title_block.GetCompany()
-        file_date = title_block.GetDate()
-
         if (hasattr(self.process_manager.board, "GetProject") and hasattr(pcbnew, "ExpandTextVars")):
             project = self.process_manager.board.GetProject()
             title = pcbnew.ExpandTextVars(title, project)
             revision = pcbnew.ExpandTextVars(revision, project)
-            company = pcbnew.ExpandTextVars(company, project)
-            file_date = pcbnew.ExpandTextVars(file_date, project)
 
-        # make output dir
         filename = os.path.splitext(os.path.basename(self.process_manager.board.GetFileName()))[0]
         output_path = os.path.join(project_directory, outputFolder)
-        if index:
-            output_path = os.path.join(output_path, get_index_folder_name(index))
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
-        
-        # rename gerber archive
+        os.makedirs(output_path, exist_ok=True)
+
         if self.options[ARCHIVE_NAME]:
             baseName = self.expandTextVariables(self.options[ARCHIVE_NAME])
-        elif index:
-            baseName = "{} {}".format(title or filename, get_index_folder_name(index))
         else:
             baseName = "{} {}".format(title or filename, revision or '')
 
-        gerberArchiveName = ProcessManager.normalize_filename("_".join((baseName.strip() + '.zip').split()))
-        os.rename(temp_file, os.path.join(temp_dir, gerberArchiveName))
+        def target(suffix):
+            return os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + suffix).split())))
 
+        os.rename(temp_file, target('.zip'))
         if os.path.exists(os.path.join(temp_dir, stepFileName)):
-            os.rename(os.path.join(temp_dir, stepFileName), os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + '.step').split()))))
+            os.rename(os.path.join(temp_dir, stepFileName), target('.step'))
 
         if self.options[ARCHIVE_NAME]:
-            if os.path.exists(os.path.join(temp_dir, designatorsFileName)):
-                os.rename(os.path.join(temp_dir, designatorsFileName), os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + '_designators.csv').split()))))
-            if os.path.exists(os.path.join(temp_dir, placementFileName)):
-                os.rename(os.path.join(temp_dir, placementFileName), os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + '_positions.csv').split()))))
-            if os.path.exists(os.path.join(temp_dir, bomFileName)):
-                os.rename(os.path.join(temp_dir, bomFileName), os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + '_bom.csv').split()))))
+            for source, suffix in ((designatorsFileName, '_designators.csv'), (placementFileName, '_positions.csv'), (bomFileName, '_bom.csv')):
+                if os.path.exists(os.path.join(temp_dir, source)):
+                    os.rename(os.path.join(temp_dir, source), target(suffix))
 
         # Make a backup as long as the BACKUP_OPT flag is set.
         if self.options[BACKUP_OPT]:
@@ -240,32 +301,9 @@ class ProcessThread(Thread):
             backup_name = ProcessManager.normalize_filename("_".join(("{} {}".format(baseName, timestamp).strip()).split()))
             shutil.make_archive(os.path.join(output_path, 'backups', backup_name), 'zip', temp_dir)
 
-        # copy to & open output dir
-        try:
-            shutil.copytree(temp_dir, output_path, dirs_exist_ok=True)
-            if self.openBrowser:
-                webbrowser.open("file://%s" % (output_path))
-            shutil.rmtree(temp_dir)
-        except Exception as e:
-            if self.openBrowser:
-                webbrowser.open("file://%s" % (temp_dir))
-
-        # archive the complete project (incl. the production data of this index)
-        if index and self.options.get(ARCHIVE_PROJECT_OPT):
-            self.step(98, 'Archiving project')
-            try:
-                archive_path = archive_project(board_file, index, outputFolder, overwrite=self.options.get(OVERWRITE_ARCHIVE_OPT, False))
-                self.log.info('Project archive: %s (%.1f MB)', archive_path, os.path.getsize(archive_path) / 1e6)
-            except Exception as e:
-                self.log.error(traceback.format_exc())
-                self.error('Archive error', str(e))
-
-        self.step(99, 'Done, output: %s' % output_path)
-
-        if self.wx is None: 
-            self.progress(100)
-        else:
-            self.progress(-1)
+        self.step(90, 'Copying files to output folder')
+        shutil.copytree(temp_dir, output_path, dirs_exist_ok=True)
+        return output_path
 
     def progress(self, percent):
         if self.wx is None:

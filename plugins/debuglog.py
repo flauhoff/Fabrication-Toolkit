@@ -15,6 +15,7 @@ def get_logger(project_directory=None):
     '''
     logger = logging.getLogger(loggerName)
     logger.setLevel(logging.DEBUG)
+    logger.propagate = False  # errors are reported separately; keep the CLI output clean
 
     if project_directory:
         path = os.path.abspath(os.path.join(project_directory, logFileName))
