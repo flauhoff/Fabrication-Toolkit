@@ -2,7 +2,7 @@
     "$schema": "https://go.kicad.org/pcm/schemas/v1",
     "name": "Schienle_PCB_Freigabe",
     "description": "PCB-Freigabe mit Zeichnungsnummer und Index",
-    "description_full": "Freigabe-Workflow fuer KiCad-Projekte. \n\n Features: \n\u2022 Eingabe von Zeichnungsnummer und Index, Index wird in die Revision des Schriftfelds uebernommen. \n\u2022 Freigabeordner <Zeichnungsnummer>_<Index> mit Gerberdaten, BOM, Bestueckungsliste, Netzliste und STEP. \n\u2022 Schaltplan als PDF. \n\u2022 Leiterplattenspezifikation als PDF (Formular im Plugin-Fenster) mit Ansicht Ober- und Unterseite. \n\u2022 DRC vor der Freigabe, bei Fehlern keine Freigabe. \n\u2022 Projekt-Backup zum Freigabezeitpunkt (auch bei den KiCad-Backups). \n\nBasiert auf dem Fabrication Toolkit von Benny Megidish (Apache-2.0): https://github.com/bennymeg/Fabrication-Toolkit",
+    "description_full": "Freigabe-Workflow fuer KiCad-Projekte (KiCad 9/10). \n\n Features: \n\u2022 Zeichnungsnummer und Index, auf Wunsch aus den Projekt-Textvariablen. \n\u2022 DRC vor der Freigabe, bei Fehlern keine Freigabe. \n\u2022 Freigabeordner <Zeichnungsnummer>_<Index> mit Gerberdaten, Stueckliste, Bestueckungsliste, Netzliste und STEP. \n\u2022 Schaltplan als PDF. \n\u2022 Leiterplattenspezifikation als PDF mit Werten aus dem Lagenaufbau und Ansicht Ober-/Unterseite. \n\u2022 Projekt-Backup zum Freigabezeitpunkt (auch bei den KiCad-Backups). \n\nBasiert auf dem Fabrication Toolkit von Benny Megidish (Apache-2.0): https://github.com/bennymeg/Fabrication-Toolkit",
     "identifier": "com.schienle.Schienle-PCB-Freigabe",
     "type": "plugin",
     "author": {
@@ -29,9 +29,9 @@
     ],
     "versions": [
         {
-            "version": "1.4.1",
+            "version": "1.5.0",
             "status": "stable",
-            "kicad_version": "6.00"
+            "kicad_version": "9.0"
         }
     ]
 }

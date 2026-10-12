@@ -135,3 +135,24 @@ def save_board(board):
         pcbnew.SaveBoard(board.GetFileName(), board)
     else:
         board.Save(board.GetFileName())
+
+def set_revision(board, index):
+    """Writes the index into the board title block revision, unless the revision refers to a
+    text variable (e.g. ${INDEX}) - then the project variable is the source and is kept."""
+    title_block = board.GetTitleBlock()
+    if '${' in title_block.GetRevision():
+        return False
+    title_block.SetRevision(index)
+    return True
+
+def get_project_variable(board, name):
+    """Value of a project text variable (Board/Schematic Setup -> Text Variables), None if not defined."""
+    if not (hasattr(board, 'GetProject') and hasattr(pcbnew, 'ExpandTextVars')):
+        return None
+    try:
+        reference = '${%s}' % name
+        value = pcbnew.ExpandTextVars(reference, board.GetProject())
+    except Exception:
+        return None
+    # KiCad leaves unknown variables unexpanded
+    return None if value == reference else value

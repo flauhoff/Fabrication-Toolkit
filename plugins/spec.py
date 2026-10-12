@@ -10,7 +10,7 @@ AUTO = None
 
 SECTIONS = [
     ('ALLGEMEIN', [
-        ('basismaterial', 'Basismaterial', ['FR4', 'Aluminium (IMS)', 'Rogers', 'Polyimid (Flex)'], 'FR4'),
+        ('basismaterial', 'Basismaterial', ['FR4', 'Aluminium', 'PTFE', 'Polyimid'], 'FR4'),
         ('lagenanzahl', 'Lagenanzahl', AUTO, ''),
         ('abmessungen', 'Abmessungen [mm]', AUTO, ''),
         ('designs', 'Anzahl verschiedener Designs', ['1', '2', '3', '4'], '1'),
@@ -20,8 +20,8 @@ SECTIONS = [
         ('dicke', 'Leiterplattendicke [mm]', ['0.8', '1.0', '1.2', '1.6', '2.0'], ''),
         ('kupferdicke', 'Kupferdicke [µm]', ['70', '35'], '70'),
         ('materialtyp', 'Materialtyp', ['FR4 TG135', 'FR4 TG150', 'FR4 TG170'], 'FR4 TG135'),
-        ('oberflaeche', 'Oberfläche', ['HAL bleifrei', 'chem. Gold (ENIG)', 'chem. Zinn', 'OSP'], 'HAL bleifrei'),
-        ('loetstopp', 'Lötstopplack (Farbe)', ['grün', 'schwarz', 'blau', 'rot', 'weiß', 'gelb'], 'grün'),
+        ('oberflaeche', 'Oberfläche', ['HAL bleifrei', 'chem. Gold (ENIG)', 'ENEPIG', 'chem. Zinn', 'chem. Silber', 'OSP'], 'HAL bleifrei'),
+        ('loetstopp', 'Lötstopplack (Farbe)', ['grün', 'schwarz', 'blau', 'rot', 'lila', 'weiß', 'gelb'], 'grün'),
         ('bestueckungsdruck', 'Bestückungsdruck (Farbe)', ['weiß', 'schwarz', 'kein'], 'weiß'),
         ('via_fuellung', 'Via-Füllung', ['keine (offen)',
                                          'abgedeckt (tented)',
@@ -42,6 +42,9 @@ HEADER_FIELDS = [
 ]
 
 AUTO_KEYS = [key for _, fields in SECTIONS for key, _, choices, _ in fields if choices is AUTO]
+
+# can be defined in Board Setup -> Physical Stackup; if so, the stackup is the source (read only in the dialog)
+STACKUP_KEYS = ['basismaterial', 'kupferdicke', 'oberflaeche', 'loetstopp', 'bestueckungsdruck']
 
 # always taken from the board when the dialog opens (not from the stored values)
 BOARD_KEYS = AUTO_KEYS + ['dicke']

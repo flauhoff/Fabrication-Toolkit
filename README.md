@@ -2,107 +2,89 @@
 
 # Schienle_PCB_Freigabe
 
-KiCad-Plugin fuer die PCB-Freigabe: Zeichnungsnummer und Index eingeben, Fertigungsdaten, STEP und Schaltplan-PDF erstellen und das Projekt zum Freigabezeitpunkt sichern (siehe [Release workflow (Freigabe)](#release-workflow-freigabe)).
+KiCad-Plugin (KiCad 9/10) für die Leiterplatten-Freigabe: Zeichnungsnummer und Index eingeben, DRC prüfen, Fertigungsdaten, STEP, Schaltplan-PDF und Leiterplattenspezifikation erstellen und das Projekt zum Freigabezeitpunkt sichern.
 
-Autor: Schienle. Basiert auf dem [Fabrication Toolkit](https://github.com/bennymeg/Fabrication-Toolkit) von Benny Megidish (Apache-2.0); die folgende Dokumentation stammt grossteils aus dem Original.
-
----
-
-<img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/assets/logo.svg?raw=true"
-    style="display:block margin-left: auto; margin-right: auto;" alt="JLC PCB Plug-in for KiCad">
-
-<div align="center">
-
-| **JLC PCB Plug-in for KiCad** |
-|:-----:|
-
-[![Sponsor](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/bennymeg)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/bennymeg/fabrication-toolkit/total)
-
-</div>
-
-## Features
-1.	Generates gerber files in correct format for production
-2.	Generates BOM file in correct format for production
-3.	Generates Pick and Place file in correct format for assembly
-4.	Generates IPC netlist file
+Autor: Schienle. Basiert auf dem [Fabrication Toolkit](https://github.com/bennymeg/Fabrication-Toolkit) von Benny Megidish (Apache-2.0).
 
 ## Installation
 
-### Official Installation
-Fabrication Toolkit is distributed with the official releases of KiCad 6+. Open the "Plugin and Content Manager" from the KiCad main menu and install the "<ins>Fabrication Toolkit</ins>" plugin from the selection list.
+KiCad → **Plugin and Content Manager** → **Install from File…** → ZIP auswählen. Danach erscheint das Schienle-Icon in der Werkzeugleiste des PCB-Editors.
 
-<img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/assets/manager.png?raw=true" height=275>
+Voraussetzung: KiCad 9 oder 10 (DRC, STEP, Schaltplan-PDF und Platinenansichten werden mit `kicad-cli` erzeugt).
 
-### Manual installation
-Download the [latest release](https://github.com/bennymeg/JLC-Plugin-for-KiCad/releases) ZIP file. Open the "Plugin and Content Manager" from the KiCads main window and install the ZIP file via "Install from File".
+## Ablauf einer Freigabe
 
-## Usage
-Click on the Fabrication Toolkit <img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/resources/icon.png?raw=true" style="margin-bottom: 8px;" alt="Logo" height=24> button on the top tool box inside KiCad pcb editor (pcbnew), choose the required options and click on 'Generate'.
-
-> [!IMPORTANT]  
-> Ensure your board is synchronized before invoking this addon [**F8**].
-
-## Options
-
-Options can be set in the dialog that appears when the plugin is invoked. They are saved in a file called `fabrication-toolkit-options.json` in the project directory so that they are remembered between invocations of the plugin.
-
-<img src="https://github.com/bennymeg/JLC-Plugin-for-KiCad/blob/master/assets/options.png?raw=true" height=275>
-
-### Release workflow (Freigabe)
-
-Enter **drawing number** (Zeichnungsnummer) and **index** to create a release. Without both, the plugin behaves like the original Fabrication Toolkit (output in `production/`).
-
-A release always
-1. fills all zones (if enabled), writes the index to the title block (if enabled) and **saves the board**,
-2. runs the **DRC** (`kicad-cli pcb drc`, KiCad 8+). **If the DRC reports errors, no release is created**; the errors are shown in a message box and written to the log. Warnings and violations excluded in KiCad's DRC dialog do not block the release,
-3. creates the release folder:
+1. Schaltplan speichern und die Platine aktualisieren (**F8**).
+2. Im PCB-Editor auf das Schienle-Icon klicken, Zeichnungsnummer und Index prüfen, **Freigabe erstellen**.
+3. Das Plugin
+   - füllt die Zonen, schreibt den Index in das Platinen-Schriftfeld und **speichert die Platine**,
+   - führt den **DRC** aus – **bei Fehlern wird keine Freigabe erstellt** (Warnungen und in KiCad ausgeschlossene Fehler blockieren nicht),
+   - erzeugt den Freigabeordner und das Projekt-Backup.
 
 ```
-<project>/Freigaben/
-└── <drawing number>_<index>/
-    ├── Gerberdaten/                         gerber + drill files (not zipped)
-    ├── <name>_bom.csv
-    ├── <name>_positions.csv
-    ├── <name>_designators.csv
-    ├── <name>_netlist.ipc
-    ├── <name>.step                          3D model
-    ├── <name>_Schaltplan.pdf                all schematic sheets
-    ├── <name>_Leiterplattenspezifikation.pdf PCB specification (second tab of the dialog)
-    ├── <name>_DRC-Bericht.txt               DRC result (warnings)
-    └── <name>_Projekt-Backup.zip            project at release time
+<Projekt>/Freigaben/
+└── <Zeichnungsnummer>_<Index>/
+    ├── Gerberdaten/                              Gerber- und Bohrdaten (nicht gezippt)
+    ├── <Name>_bom.csv                            Stückliste
+    ├── <Name>_positions.csv                      Bestückungsliste
+    ├── <Name>_designators.csv
+    ├── <Name>_netlist.ipc                        IPC-Netzliste
+    ├── <Name>.step                               3D-Modell
+    ├── <Name>_Schaltplan.pdf                     alle Schaltplanblätter
+    ├── <Name>_Leiterplattenspezifikation.pdf     Spezifikation (Seite 2: Ansicht Ober-/Unterseite)
+    ├── <Name>_DRC-Bericht.txt                    DRC-Ergebnis (Warnungen)
+    └── <Name>_Projekt-Backup.zip                 Projekt zum Freigabezeitpunkt
 
-<project>-backups/
-    └── Freigabe_<name>_<YYYY-MM-DD_HHMMSS>.zip   same project backup, next to KiCad's automatic backups
+<Projekt>-backups/
+    └── Freigabe_<Name>_<JJJJ-MM-TT_hhmmss>.zip   dasselbe Backup bei den automatischen KiCad-Backups
 ```
 
-The copy in `<project>-backups/` shows the release history next to KiCad's automatic backups. Its name deliberately does not follow KiCad's backup pattern, so KiCad's backup retention never deletes it.
+Die Kopie in `<Projekt>-backups/` zeigt die Freigabe-Historie neben den automatischen KiCad-Backups. Ihr Name folgt bewusst nicht dem KiCad-Backup-Muster, damit KiCads Aufräumen sie nie löscht. Eine bestehende Freigabe wird nur nach Rückfrage überschrieben.
 
-☑ __Write index to title block revision__: Sets the board's title block revision to the index and saves the board *before* plotting, so `${REVISION}` on the PCB already shows the new index.</br>
-☑ __Export 3D model (STEP)__: Uses `kicad-cli` (KiCad 7+) on the **saved** board file.</br>
-☑ __Export schematic as PDF__: Plots `<project>.kicad_sch` (all sheets) with `kicad-cli` (KiCad 7+) from the **saved** schematic. On KiCad 8+ the text variables `${ZEICHNUNGSNUMMER}` and `${INDEX}` are available in the schematic (e.g. in the title block).</br>
-☑ __Create PCB specification__: Creates `<name>_Leiterplattenspezifikation.pdf` from the second tab of the dialog (header, base material, layer count, dimensions, thickness, copper thickness (default 70 µm), material type, surface finish, solder mask / silkscreen color, via filling, contour machining, remarks). Layer count, dimensions and thickness are read from the board; all other values are remembered per project. The PDF is written without additional Python packages.</br>
-☑ __Add top / bottom view to PCB specification__: Renders the board from top and bottom with `kicad-cli pcb render` (KiCad 9+, incl. 3D models, transparent background) and adds both views on page 2 of the PCB specification. On older KiCad versions the specification is created without images.</br>
-☑ __Create project backup__: Zips the complete project directory (also copied to `<project>-backups/`) (schematics, board, libraries, 3D models, ...). `Freigaben/`, `production/`, backups, lock files, `fp-info-cache` and VCS folders are excluded.</br>
+## Zeichnungsnummer und Index
 
-An existing release with the same drawing number and index is only overwritten after confirmation. Drawing number and index are remembered per project.
+Empfohlen: **`ZEICHNUNGSNUMMER` und `INDEX` als Projekt-Textvariablen anlegen** (Datei → Board Setup bzw. Schaltplan-Setup → Text Variables) und in den Schriftfeldern von Schaltplan und Platine `${INDEX}` (und ggf. `${ZEICHNUNGSNUMMER}`) verwenden. Dann
 
-__Debugging__: every run is logged with timestamps and the duration of each step to `schienle-pcb-freigabe.log` in the project directory (incl. KiCad version, options, the `kicad-cli` calls and their output, and full error tracebacks). The current step is also shown in the dialog title, so a hanging step is visible immediately.
+- zeigen Schaltplan, Platine und alle PDFs immer denselben Stand,
+- übernimmt das Plugin die Werte automatisch (Felder grau, nicht änderbar),
+- bleibt eine Revision `${INDEX}` im Platinen-Schriftfeld erhalten (sie wird nicht durch den Wert ersetzt).
 
-### Fabrication options
+Ohne Projektvariablen werden Zeichnungsnummer und Index im Dialog eingegeben und pro Projekt gespeichert. Vor der Freigabe prüft das Plugin, ob die Revision im (gespeicherten) Schaltplan-Schriftfeld zum Index passt, und fragt bei Abweichung nach.
 
-☑ __Archive name__: Name of the archive file to be generated. Can include text variables, such as e.g. `${TITLE}_${REVISION}`</br>
-☑ __Additional layers__: Comma-separated list of additional layers to include in the gerber archive.</br>
-☑ __Plot all active layers__: Whether to include all layers, instead of just the layers required by JLCPCB.</br>
-☑ __Set User.1 as V-Cut layer__: Merge User.1 layer with the Edge-Cut layer in production.</br>
-☑ __Use User.2 for an alternative Edge-Cut layer__: Use the User.2 instead of the Edge-Cut layer for the board outline in production. 
-    This is useful if you need process edges or panelization during production but still want to keep the individual outline for prototyping, 3D model exports, or similar purposes.</br>
-☑ __Apply automatic translations__: Apply known translation fixes for common components.</br>
-☑ __Apply automatic fill for all zones__: Refill all zones before generation production files.</br>
-☑ __Exclude DNP components from BOM__: Exclude components the had been set a DNP from th BOM.</br>
-☑ __Generate Backups__: Generate Backup zip for the production files.</br>
+## Optionen (Reiter „Freigabe“)
 
-## Attributes
+☑ __Index in die Revision des Platinen-Schriftfelds schreiben__ (außer die Revision verweist auf eine Textvariable)</br>
+☑ __Alle Zonen vor der Freigabe füllen__</br>
+☑ __3D-Modell exportieren (STEP)__</br>
+☑ __Schaltplan als PDF exportieren__: alle Blätter von `<Projekt>.kicad_sch`; `${ZEICHNUNGSNUMMER}` und `${INDEX}` stehen im Schaltplan zur Verfügung.</br>
+☑ __Leiterplattenspezifikation erstellen (PDF)__, optional __mit Ansicht Ober- und Unterseite__ (3D-Rendering mit Bauteilmodellen)</br>
+☑ __Projekt-Backup erstellen__: Schaltplan, Platine, Bibliotheken, 3D-Modelle usw.; `Freigaben/`, Backups, Lock-Dateien, `fp-info-cache` und VCS-Ordner werden ausgelassen.</br>
+☑ __Freigabeordner danach öffnen__</br>
+
+Unter **Erweitert (Fertigungsdaten)** liegen die Optionen des Original-Toolkits: zusätzliche Lagen, alle aktiven Lagen plotten, User.1 als V-Cut-Lage, User.2 als alternative Kontur, JLC-Bestückungskorrekturen und DNP-Bauteile aus der Stückliste ausschließen.
+
+Alle Einstellungen werden pro Projekt in `fabrication-toolkit-options.json` gespeichert.
+
+## Leiterplattenspezifikation (Reiter „Leiterplattenspezifikation“)
+
+Kopf (Projekt, Firma, Freigegeben von), Allgemein, Leiterplatte, Mechanische Bearbeitung und Bemerkungen. Grau hinterlegte Werte werden nicht im Dialog gepflegt, sondern kommen aus KiCad:
+
+| Wert | Quelle |
+|---|---|
+| Lagenanzahl, Abmessungen | Platine |
+| Leiterplattendicke | Platine (änderbar) |
+| Basismaterial, Kupferdicke (außen/innen), Oberfläche, Lötstopplack- und Bestückungsdruckfarbe | **Board Setup → Physical Stackup**, sofern dort definiert |
+
+Alle übrigen Werte (z. B. Materialtyp, Via-Füllung, Konturbearbeitung, Bemerkungen) werden pro Projekt gespeichert.
+
+## Fehlersuche
+
+Jeder Lauf wird mit Zeitstempel und Dauer pro Schritt in `schienle-pcb-freigabe.log` im Projektordner protokolliert (inkl. KiCad-Version, Optionen, `kicad-cli`-Aufrufen und -Ausgaben sowie vollständigen Fehlermeldungen). Der aktuelle Schritt steht während der Freigabe auch im Fenstertitel.
+
+## Bauteil-Attribute (Erweitert, aus dem Original-Toolkit)
+
+Die folgenden Attribute stammen aus dem Fabrication Toolkit (englische Originaldokumentation). Sie steuern MPN, Rotations- und Positionskorrekturen für die Bestückungsliste – relevant vor allem in Verbindung mit „JLC-Bestückungskorrekturen anwenden“.
+
 
 > [!NOTE]  
 > All the attributes are entered in the Schematic Editor, make sure to update your PCB [**F8**] with the changes made to the schematic before generating a new set of production files, otherwise your changes won't be reflected.
@@ -234,63 +216,44 @@ _The fields will be queried in the order denoted above._
 _The fields will be queried in the order denoted above._
 
 
-## CLI
-The plugin can also be used via the linux and windows command line. This can be particularly useful if you need to embed the plugin into an automation pipeline or environment.
-The plugin can be called with the command below:
+## Kommandozeile
+
+Die Freigabe (ohne Leiterplattenspezifikation) lässt sich auch ohne Oberfläche erstellen, z. B. für Automatisierung:
+
 ```
-python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb
+python3 -m plugins.cli -p /meinProjekt/meinePlatine.kicad_pcb -dn 4711-02 -i B -sR -f -st -sp -pB -nI
 ```
 
-All the options from the GUI are also available via the cli interface:
 ```
 python3 -m plugins.cli -h
 
-usage: Schienle_PCB_Freigabe [-h] --path PATH [--additionalLayers LAYERS] [--user1VCut] [--user2AltVCut]
-                           [--autoTranslate] [--autoFill] [--excludeDNP] [--allActiveLayers] [--archiveName NAME]
-                           [--openBrowser] [--noBackup]
+usage: Schienle_PCB_Freigabe [-h] --path PATH --drawingNumber NUMMER --index INDEX [--setRevision] [--autoFill]
+                             [--stepExport] [--schematicPdf] [--projectBackup] [--overwrite] [--openBrowser]
+                             [--nonInteractive] [--additionalLayers LAGEN] [--allActiveLayers] [--user1VCut]
+                             [--user2AltVCut] [--autoTranslate] [--excludeDNP]
 
-Generates JLCPCB production files from a KiCAD board file
-
-options:
-  -h, --help            show this help message and exit
-  --path PATH, -p PATH  Path to KiCAD board file
-  --additionalLayers LAYERS, -aL LAYERS
-                        Additional layers(comma-separated)
-  --user1VCut, -u1      Set User.1 as V-Cut layer
-  --user2AltVCut, -u2   Use User.2 for alternative Edge-Cut layer
-  --autoTranslate, -t   Apply automatic position/rotation translations
-  --autoFill, -f        Apply automatic fill for all zones
-  --excludeDNP, -e      Exclude DNP components from BOM
-  --allActiveLayers, -aaL
-                        Export all active layers instead of only commonly used ones
-  --archiveName NAME, -aN NAME
-                        Name of the generated archives
-  --openBrowser, -b     Open web browser with directory file overview after generation
-  --noBackup, -nB       Do not create a backup of the project before generation
-  --drawingNumber NUMBER, -dn NUMBER
-                        Drawing number (Zeichnungsnummer) of this release
-  --index INDEX, -i INDEX
-                        Index of this release (e.g. A, B, 01)
-  --setRevision, -sR    Write the index into the title block revision and save the board
-  --stepExport, -st     Export the 3D model as STEP (requires KiCad 7+)
-  --schematicPdf, -sp   Export the schematic as PDF (release only, requires KiCad 7+)
-  --projectBackup, -pB  Add a zipped project backup to the release
-  --overwrite, -o       Overwrite an existing release with the same drawing number and index
+  --path, -p PATH       Pfad zur KiCad-Platine (.kicad_pcb)
+  --drawingNumber, -dn NUMMER
+                        Zeichnungsnummer der Freigabe
+  --index, -i INDEX     Index der Freigabe (z. B. A, B, 01)
+  --setRevision, -sR    Index in die Revision des Platinen-Schriftfelds schreiben
+  --autoFill, -f        Alle Zonen vor der Freigabe füllen
+  --stepExport, -st     3D-Modell als STEP exportieren
+  --schematicPdf, -sp   Schaltplan als PDF exportieren
+  --projectBackup, -pB  Projekt-Backup erstellen
+  --overwrite, -o       Bestehende Freigabe überschreiben
+  --openBrowser, -b     Freigabeordner danach öffnen
+  --nonInteractive, -nI Ohne Fortschrittsanzeige (z. B. für CI)
+  --additionalLayers, -aL LAGEN, --allActiveLayers, -aaL, --user1VCut, -u1, --user2AltVCut, -u2,
+  --autoTranslate, -t, --excludeDNP, -e
+                        Erweiterte Optionen wie im Dialog
 ```
 
-Complete release of drawing number `4711-02`, index `B`:
-```
-python3 -m plugins.cli -p /myProject/myBoard.kicad_pcb -dn 4711-02 -i B -sR -st -sp -pB -f -nI
-```
+Unter Windows in der `KiCad Command Prompt` mit `python` statt `python3` ausführen. Für das installierte Plugin `plugins.cli` durch den Paketnamen ersetzen, z. B.
+`python -m "${KICAD10_3RD_PARTY}plugins/com_schienle_Schienle-PCB-Freigabe.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb" -dn 4711-02 -i B`
 
-### Notes
-
-- On windows the commands have to be run inside the `KiCad Command Prompt`. Moreover, instead of `python3` they are run with a simple `python` in front.
-- If the CLI should be used with the installed plugin, `plugins.cli` has to be replaced with the package name. In a jobset it would look like this:
-  `python -m "${KICAD9_3RD_PARTY}plugins/com_schienle_Schienle-PCB-Freigabe.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb"`
-
-## Author
+## Autor
 
 Schienle
 
-Original Fabrication Toolkit: Benny Megidish
+Original Fabrication Toolkit: Benny Megidish (Apache-2.0)
