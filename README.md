@@ -59,7 +59,7 @@ Options can be set in the dialog that appears when the plugin is invoked. They a
 
 ☑ __Add PCB specification (Leiterplattenspezifikation)__: Adds the PCB specification to the release. It is filled in via __Edit PCB specification...__ (or automatically opened on release if it is missing or incomplete) and stored in `leiterplattenspezifikation.json` in the project directory, so it is versioned and archived with the project. On release it is written as PDF with the Schienle logo (`<Title>_Index_<INDEX>_Leiterplattenspezifikation.pdf`) into the gerber archive and next to the fabrication data. The PDF is generated without additional Python packages.</br>
 
-The form contains the basic order data: base material, quantity, product type, number of different designs, delivery format (single PCB / panel by customer / panel by manufacturer), board thickness, solder mask and silkscreen colour, material type, surface finish, contour machining (milled / V-scored / milled with break-away tabs), author and notes. Layer count and board dimensions are read from the board at release time; the board thickness is prefilled from the board setup.
+The form contains the basic order data: base material, number of different designs, delivery format (single PCB / panel by customer / panel by manufacturer), board thickness, solder mask and silkscreen colour, material type, surface finish, contour machining (milled / V-scored / milled with break-away tabs), author and notes. Layer count and board dimensions are read from the board at release time; the board thickness is prefilled from the board setup.
 
 When an index is set, the fabrication data is written to `production/Index_<INDEX>/` instead of `production/`, so every index keeps its own data set.
 

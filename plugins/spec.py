@@ -17,8 +17,6 @@ FIELDS = [
     ('material',       'Basismaterial',               ['FR4', 'Flex', 'Aluminium', 'Kupferkern'], 'FR4', True),
     ('layers',         'Lagenanzahl',                 'board', '', True),
     ('dimensions',     'Abmessungen [mm]',            'board', '', True),
-    ('quantity',       'Menge',                       None, '', False),
-    ('product_type',   'Produkttyp',                  ['Industrie-/Consumer-Elektronik', 'Luft- und Raumfahrt', 'Medizintechnik'], 'Industrie-/Consumer-Elektronik', True),
     ('designs',        'Anzahl verschiedener Designs', ['1', '2', '3', '4'], '1', True),
     ('delivery',       'Liefereinheit',               ['Einzelkarte', 'Nutzen durch Kunde (gemäß Gerber)', 'Nutzen durch Hersteller'], 'Einzelkarte', True),
     ('thickness',      'Leiterplattendicke [mm]',     ['0.4', '0.6', '0.8', '1.0', '1.2', '1.6', '2.0'], 'board', True),
@@ -33,7 +31,7 @@ FIELDS = [
 
 # Grouping of the fields in the PDF
 SECTIONS = [
-    ('Allgemein',              ['material', 'layers', 'dimensions', 'quantity', 'product_type', 'designs', 'delivery']),
+    ('Allgemein',              ['material', 'layers', 'dimensions', 'designs', 'delivery']),
     ('Leiterplatte',           ['thickness', 'material_type', 'surface', 'soldermask', 'silkscreen']),
     ('Mechanische Bearbeitung', ['contour']),
     ('Bemerkungen',            ['notes']),
