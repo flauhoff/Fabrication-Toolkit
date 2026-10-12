@@ -13,7 +13,7 @@ from .events import StatusEvent
 from .process import ProcessManager
 from .archive import backup_project, normalize_name, get_release_name, get_release_path, gerberFolder
 from .archive import get_kicad_backups_path, get_kicad_backup_name
-from .kicad_cli import export_step, export_schematic_pdf, run_drc, stepFileName
+from .kicad_cli import export_step, export_schematic_pdf, run_drc, render_board, stepFileName
 from .drc import load_drc_report, format_drc_summary
 from .specpdf import write_spec_pdf
 from . import spec
@@ -287,9 +287,24 @@ class ProcessThread(Thread):
                     'zeichnungsnummer': self.options[DRAWING_NO_OPT].strip(),
                     'index': self.options[INDEX_OPT].strip(),
                 }
+                views = []
+                if self.options.get(PCB_SPEC_VIEWS_OPT):
+                    self.step(81, 'Rendering top / bottom view (kicad-cli)')
+                    render_dir = tempfile.mkdtemp()
+                    try:
+                        for side, caption in (('top', 'ANSICHT OBERSEITE (TOP)'), ('bottom', 'ANSICHT UNTERSEITE (BOTTOM)')):
+                            views.append((caption, render_board(board_file, os.path.join(render_dir, side + '.png'), side, logger=self.log)))
+                    except Exception as e:
+                        # the specification is still created, just without images
+                        self.log.error(traceback.format_exc())
+                        self.error('Board image error', str(e))
+                        views = []
+                    self.step(83, 'Creating PCB specification')
                 write_spec_pdf(os.path.join(temp_dir, name + '_Leiterplattenspezifikation.pdf'), header,
                                spec.build_sections(values), values.get('bemerkungen', ''),
-                               os.path.join(os.path.dirname(__file__), 'logo_pdf.jpg'))
+                               os.path.join(os.path.dirname(__file__), 'logo_pdf.jpg'), views)
+                if views:
+                    shutil.rmtree(os.path.dirname(views[0][1]), ignore_errors=True)
             except Exception as e:
                 self.log.error(traceback.format_exc())
                 self.error('PCB specification error', str(e))

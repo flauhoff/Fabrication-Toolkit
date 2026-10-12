@@ -133,3 +133,21 @@ def run_drc(board_file, report_file, timeout=600, logger=None):
         raise RuntimeError('DRC could not be run (exit code {}). The DRC check requires KiCad 8 or newer.\n{}'.format(returncode, output[-2000:]))
 
     return report_file
+
+
+def render_board(board_file, output_file, side='top', width=1600, height=1200, timeout=600, logger=None):
+    '''Renders the (saved) board in 3D as PNG with transparent background (KiCad 9+).'''
+    cmd = [find_kicad_cli(), 'pcb', 'render',
+           '--side', side,
+           '--background', 'transparent',
+           '--quality', 'basic',
+           '--width', str(width),
+           '--height', str(height),
+           '--output', output_file,
+           board_file]
+
+    returncode, output = _run(cmd, timeout, logger)
+    if returncode != 0 or not os.path.isfile(output_file):
+        raise RuntimeError('Rendering the {} view failed (exit code {}). Board images require KiCad 9 or newer.\n{}'.format(side, returncode, output[-2000:]))
+
+    return output_file

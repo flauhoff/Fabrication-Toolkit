@@ -4,7 +4,7 @@ import pcbnew  # type: ignore
 
 from .thread import ProcessThread
 from .events import StatusEvent
-from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, STEP_EXPORT_OPT, DRAWING_NO_OPT, SCHEMATIC_PDF_OPT, PROJECT_BACKUP_OPT, OVERWRITE_RELEASE_OPT, PCB_SPEC_OPT, PCB_SPEC_VALUES
+from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, STEP_EXPORT_OPT, DRAWING_NO_OPT, SCHEMATIC_PDF_OPT, PROJECT_BACKUP_OPT, OVERWRITE_RELEASE_OPT, PCB_SPEC_OPT, PCB_SPEC_VALUES, PCB_SPEC_VIEWS_OPT
 from . import spec
 from .archive import normalize_name, get_release_name, get_release_path
 from .utils import load_user_options, save_user_options, get_layer_names, save_board
@@ -50,6 +50,7 @@ class KiCadToJLCForm(wx.Frame):
             SCHEMATIC_PDF_OPT: True,
             PROJECT_BACKUP_OPT: True,
             PCB_SPEC_OPT: True,
+            PCB_SPEC_VIEWS_OPT: True,
             PCB_SPEC_VALUES: {},
         })
 
@@ -75,6 +76,10 @@ class KiCadToJLCForm(wx.Frame):
         self.mSchematicPdfCheckbox.SetValue(userOptions[SCHEMATIC_PDF_OPT])
         self.mPcbSpecCheckbox = wx.CheckBox(page, label='Create PCB specification (Leiterplattenspezifikation, PDF)')
         self.mPcbSpecCheckbox.SetValue(userOptions[PCB_SPEC_OPT])
+        self.mPcbSpecViewsCheckbox = wx.CheckBox(page, label='Add top / bottom view to PCB specification (KiCad 9+)')
+        self.mPcbSpecViewsCheckbox.SetValue(userOptions[PCB_SPEC_VIEWS_OPT])
+        self.mPcbSpecCheckbox.Bind(wx.EVT_CHECKBOX, lambda e: self.mPcbSpecViewsCheckbox.Enable(self.mPcbSpecCheckbox.GetValue()))
+        self.mPcbSpecViewsCheckbox.Enable(userOptions[PCB_SPEC_OPT])
         self.mProjectBackupCheckbox = wx.CheckBox(page, label='Create project backup')
         self.mProjectBackupCheckbox.SetValue(userOptions[PROJECT_BACKUP_OPT])
 
@@ -105,7 +110,7 @@ class KiCadToJLCForm(wx.Frame):
 
         pageSizer = wx.BoxSizer(wx.VERTICAL)
         for control in (self.mIndexLabel, self.mDrawingNoControl, self.mIndexControl, self.mSetRevisionCheckbox,
-                        self.mStepExportCheckbox, self.mSchematicPdfCheckbox, self.mPcbSpecCheckbox, self.mProjectBackupCheckbox,
+                        self.mStepExportCheckbox, self.mSchematicPdfCheckbox, self.mPcbSpecCheckbox, self.mPcbSpecViewsCheckbox, self.mProjectBackupCheckbox,
                         self.mArchiveNameControl, self.mAdditionalLayersControl, self.mAllActiveLayersCheckbox,
                         self.mExtendEdgeCutsCheckbox, self.mAlternativeEdgeCutsCheckbox, self.mAutomaticTranslationCheckbox,
                         self.mAutomaticFillCheckbox, self.mExcludeDnpCheckbox, self.mOpenBrowserCheckbox):
@@ -207,6 +212,7 @@ class KiCadToJLCForm(wx.Frame):
         options[STEP_EXPORT_OPT] = self.mStepExportCheckbox.GetValue()
         options[SCHEMATIC_PDF_OPT] = self.mSchematicPdfCheckbox.GetValue()
         options[PCB_SPEC_OPT] = self.mPcbSpecCheckbox.GetValue()
+        options[PCB_SPEC_VIEWS_OPT] = self.mPcbSpecViewsCheckbox.GetValue()
         options[PROJECT_BACKUP_OPT] = self.mProjectBackupCheckbox.GetValue()
         options[PCB_SPEC_VALUES] = {key: control.GetValue().strip() if key != 'bemerkungen' else control.GetValue()
                                     for key, control in self.mSpecControls.items()}
