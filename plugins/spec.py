@@ -12,25 +12,21 @@ specOutputName = 'Leiterplattenspezifikation'
 # - choices: list -> editable drop down, None -> free text, 'board' -> read from the board (read only)
 # - default 'board' -> prefilled from the board, but editable
 FIELDS = [
-    ('material',       'Basismaterial',                    ['FR4', 'FR4 High-Tg (Tg 170)', 'Aluminium (IMS)', 'Polyimid (flexibel)'], 'FR4', True),
-    ('layers',         'Lagenanzahl',                      'board', '', True),
-    ('dimensions',     'Abmessungen [mm]',                 'board', '', True),
-    ('thickness',      'Leiterplattendicke [mm]',          ['0.8', '1.0', '1.2', '1.6', '2.0', '2.4'], 'board', True),
-    ('copper_outer',   'Kupferdicke Außenlagen',           ['18 µm', '35 µm', '70 µm', '105 µm'], '35 µm', True),
-    ('copper_inner',   'Kupferdicke Innenlagen',           ['-', '18 µm', '35 µm', '70 µm'], '-', False),
-    ('surface',        'Oberfläche',                       ['HAL bleifrei', 'ENIG (chem. Ni/Au)', 'OSP', 'chem. Zinn', 'chem. Silber'], 'HAL bleifrei', True),
-    ('soldermask',     'Lötstopplack',                     ['grün', 'schwarz', 'blau', 'rot', 'weiß', 'ohne'], 'grün', True),
-    ('silkscreen',     'Bestückungsdruck',                 ['weiß', 'schwarz', 'gelb', 'ohne'], 'weiß', True),
-    ('min_track',      'Min. Leiterbahnbreite [mm]',       'board', '', False),
-    ('min_clearance',  'Min. Abstand (Designregel) [mm]',  'board', '', False),
-    ('min_drill',      'Min. Bohrdurchmesser [mm]',        'board', '', False),
-    ('ipc_class',      'Qualität (IPC-A-600)',             ['Klasse 2', 'Klasse 3'], 'Klasse 2', True),
-    ('etest',          'Elektrischer Test',                ['ja', 'nein'], 'ja', True),
-    ('impedance',      'Impedanzkontrolle',                ['nein', 'ja (siehe Bemerkungen)'], 'nein', True),
-    ('delivery',       'Liefereinheit',                    ['Einzelkarte', 'Nutzen (gemäß Gerber)', 'Nutzen durch Hersteller'], 'Einzelkarte', True),
-    ('quantity',       'Menge',                            None, '', False),
-    ('author',         'Erstellt / freigegeben von',       None, '', True),
-    ('notes',          'Bemerkungen',                      None, '', False),
+    ('material',       'Basismaterial',               ['FR4', 'Flex', 'Aluminium', 'Kupferkern', 'Rogers', 'PTFE (Teflon)', 'HDI'], 'FR4', True),
+    ('layers',         'Lagenanzahl',                 'board', '', True),
+    ('dimensions',     'Abmessungen [mm]',            'board', '', True),
+    ('quantity',       'Menge',                       None, '', False),
+    ('product_type',   'Produkttyp',                  ['Industrie-/Consumer-Elektronik', 'Luft- und Raumfahrt', 'Medizintechnik'], 'Industrie-/Consumer-Elektronik', True),
+    ('designs',        'Anzahl verschiedener Designs', ['1', '2', '3', '4'], '1', True),
+    ('delivery',       'Liefereinheit',               ['Einzelkarte', 'Nutzen durch Kunde (gemäß Gerber)', 'Nutzen durch Hersteller'], 'Einzelkarte', True),
+    ('thickness',      'Leiterplattendicke [mm]',     ['0.4', '0.6', '0.8', '1.0', '1.2', '1.6', '2.0'], 'board', True),
+    ('soldermask',     'Lötstopplack (Farbe)',        ['grün', 'violett', 'rot', 'gelb', 'blau', 'weiß', 'schwarz'], 'grün', True),
+    ('silkscreen',     'Bestückungsdruck (Farbe)',    ['weiß', 'schwarz'], 'weiß', True),
+    ('material_type',  'Materialtyp',                 ['FR4 TG135', 'KB6164 TG135', 'Nan Ya NP-140F', 'S1141 TG140', 'S1000H TG155'], 'FR4 TG135', True),
+    ('surface',        'Oberfläche',                  ['OSP', 'HAL (bleihaltig)', 'HAL bleifrei', 'ENIG (chem. Ni/Au)'], 'HAL bleifrei', True),
+    ('contour',        'Konturbearbeitung',           ['gefräst', 'geritzt (V-Cut, gebrochen)', 'gefräst mit Stegen (gebrochen)'], 'gefräst', True),
+    ('author',         'Erstellt / freigegeben von',  None, '', True),
+    ('notes',          'Bemerkungen',                 None, '', False),
 ]
 
 BOARD_KEYS = [key for key, _, choices, _, _ in FIELDS if choices == 'board']
@@ -69,63 +65,7 @@ def read_board_values(board):
     except Exception:
         pass
 
-    min_track = None
-    min_drill = None
-    try:
-        for track in board.GetTracks():
-            if 'VIA' in track.GetClass().upper():
-                drill = track.GetDrillValue()
-                if drill > 0:
-                    min_drill = drill if min_drill is None else min(min_drill, drill)
-            else:
-                width = track.GetWidth()
-                if width > 0:
-                    min_track = width if min_track is None else min(min_track, width)
-    except Exception:
-        pass
-
-    try:
-        for footprint in board.GetFootprints():
-            for pad in footprint.Pads():
-                size = pad.GetDrillSize()
-                drill = min(size.x, size.y)
-                if drill > 0:
-                    min_drill = drill if min_drill is None else min(min_drill, drill)
-    except Exception:
-        pass
-
-    if min_track is not None:
-        values['min_track'] = _mm(min_track)
-    if min_drill is not None:
-        values['min_drill'] = _mm(min_drill)
-
-    clearance = _get_default_clearance(board)
-    if clearance:
-        values['min_clearance'] = _mm(clearance)
-
     return values
-
-
-def _get_default_clearance(board):
-    '''Smallest clearance of the design rules (minimum clearance or default net class).'''
-    settings = board.GetDesignSettings()
-    candidates = []
-
-    getters = [
-        lambda: settings.m_MinClearance,
-        lambda: settings.m_NetSettings.GetDefaultNetclass().GetClearance(),   # KiCad 8+
-        lambda: settings.m_NetSettings.m_DefaultNetClass.GetClearance(),      # KiCad 7
-        lambda: settings.GetDefault().GetClearance(),                         # KiCad 6
-    ]
-    for getter in getters:
-        try:
-            value = int(getter())
-            if value > 0:
-                candidates.append(value)
-        except Exception:
-            pass
-
-    return min(candidates) if candidates else None
 
 
 def default_spec(board):
@@ -134,9 +74,6 @@ def default_spec(board):
     spec = {}
     for key, _, _, default, _ in FIELDS:
         spec[key] = board_values.get(key, '') if default == 'board' else default
-
-    if board_values.get('layers') and int(board_values['layers']) > 2:
-        spec['copper_inner'] = '35 µm'
 
     return spec
 
