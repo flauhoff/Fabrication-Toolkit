@@ -53,6 +53,11 @@ Options can be set in the dialog that appears when the plugin is invoked. They a
 
 Enter **drawing number** (Zeichnungsnummer) and **index** to create a release. Without both, the plugin behaves like the original Fabrication Toolkit (output in `production/`).
 
+A release always
+1. fills all zones (if enabled), writes the index to the title block (if enabled) and **saves the board**,
+2. runs the **DRC** (`kicad-cli pcb drc`, KiCad 8+). **If the DRC reports errors, no release is created**; the errors are shown in a message box and written to the log. Warnings and violations excluded in KiCad's DRC dialog do not block the release,
+3. creates the release folder:
+
 ```
 <project>/Freigaben/
 └── <drawing number>_<index>/
@@ -63,13 +68,19 @@ Enter **drawing number** (Zeichnungsnummer) and **index** to create a release. W
     ├── <name>_netlist.ipc
     ├── <name>.step                          3D model
     ├── <name>_Schaltplan.pdf                all schematic sheets
+    ├── <name>_DRC-Bericht.txt               DRC result (warnings)
     └── <name>_Projekt-Backup.zip            project at release time
+
+<project>-backups/
+    └── Freigabe_<name>_<YYYY-MM-DD_HHMMSS>.zip   same project backup, next to KiCad's automatic backups
 ```
+
+The copy in `<project>-backups/` shows the release history next to KiCad's automatic backups. Its name deliberately does not follow KiCad's backup pattern, so KiCad's backup retention never deletes it.
 
 ☑ __Write index to title block revision__: Sets the board's title block revision to the index and saves the board *before* plotting, so `${REVISION}` on the PCB already shows the new index.</br>
 ☑ __Export 3D model (STEP)__: Uses `kicad-cli` (KiCad 7+) on the **saved** board file.</br>
 ☑ __Export schematic as PDF__: Plots `<project>.kicad_sch` (all sheets) with `kicad-cli` (KiCad 7+) from the **saved** schematic. On KiCad 8+ the text variables `${ZEICHNUNGSNUMMER}` and `${INDEX}` are available in the schematic (e.g. in the title block).</br>
-☑ __Create project backup__: Zips the complete project directory (schematics, board, libraries, 3D models, ...). `Freigaben/`, `production/`, backups, lock files, `fp-info-cache` and VCS folders are excluded.</br>
+☑ __Create project backup__: Zips the complete project directory (also copied to `<project>-backups/`) (schematics, board, libraries, 3D models, ...). `Freigaben/`, `production/`, backups, lock files, `fp-info-cache` and VCS folders are excluded.</br>
 
 An existing release with the same drawing number and index is only overwritten after confirmation. Drawing number and index are remembered per project.
 

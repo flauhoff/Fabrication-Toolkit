@@ -12,7 +12,9 @@ from threading import Thread
 from .events import StatusEvent
 from .process import ProcessManager
 from .archive import backup_project, normalize_name, get_release_name, get_release_path, gerberFolder
-from .kicad_cli import export_step, export_schematic_pdf, stepFileName
+from .archive import get_kicad_backups_path, get_kicad_backup_name
+from .kicad_cli import export_step, export_schematic_pdf, run_drc, stepFileName
+from .drc import load_drc_report, format_drc_summary
 from .config import *
 from .options import *
 from .utils import print_cli_progress_bar, save_board
@@ -127,17 +129,38 @@ class ProcessThread(Thread):
         index = normalize_name(self.options.get(INDEX_OPT))
         release = bool(drawing_number and index)
 
+        self.drc = None
+
         try:
-            # Write the index into the title block (revision) before plotting, so that
-            # ${REVISION} on the board (e.g. silkscreen) already shows the new index
-            # (in the GUI this is done by the dialog in the main thread, see plugin.py)
-            if index and self.options.get(SET_REVISION_OPT) and self.wx is None:
-                self.step(5, 'Writing index to title block and saving board')
-                self.process_manager.board.GetTitleBlock().SetRevision(self.options[INDEX_OPT].strip())
-                save_board(self.process_manager.board)
+            if release:
+                # kicad-cli (DRC, STEP, PDF) works on the saved files: fill zones, write the index into
+                # the title block (so ${REVISION} on the board already shows it) and save the board.
+                # In the GUI this is done by the dialog in the main thread (see plugin.py).
+                if self.wx is None:
+                    if self.options[AUTO_FILL_OPT]:
+                        self.step(3, 'Filling zones')
+                        self.process_manager.update_zone_fills()
+                    self.step(6, 'Saving board')
+                    if self.options.get(SET_REVISION_OPT):
+                        self.process_manager.board.GetTitleBlock().SetRevision(self.options[INDEX_OPT].strip())
+                    save_board(self.process_manager.board)
+
+                # no release with DRC errors
+                self.step(8, 'Running DRC (kicad-cli)')
+                report_file = os.path.join(temp_dir, 'drc.json')
+                run_drc(board_file, report_file, logger=self.log)
+                errors, warnings = load_drc_report(report_file)
+                self.drc = (errors, warnings)
+                self.log.info(format_drc_summary(errors, warnings))
+                if errors:
+                    self.error('DRC failed - no release',
+                               'The release was NOT created because the DRC reports errors.\n\n' + format_drc_summary(errors, warnings, limit=15))
+                    self.progress(100 if self.wx is None else -1)
+                    return
+                os.remove(report_file)
 
             # Verify all zones are up-to-date
-            if (self.options[AUTO_FILL_OPT]):
+            elif self.options[AUTO_FILL_OPT]:
                 self.step(10, 'Filling zones')
                 self.process_manager.update_zone_fills()
 
@@ -216,6 +239,10 @@ class ProcessThread(Thread):
             shutil.rmtree(release_path)
 
         # fabrication files with the release name
+        if self.drc is not None:
+            with open(os.path.join(temp_dir, name + '_DRC-Bericht.txt'), 'w', encoding='utf-8') as f:
+                f.write(format_drc_summary(*self.drc) + '\n')
+
         renames = {
             netlistFileName: name + '_netlist.ipc',
             designatorsFileName: name + '_designators.csv',
@@ -253,6 +280,12 @@ class ProcessThread(Thread):
                 backup_path = os.path.join(release_path, name + '_Projekt-Backup.zip')
                 count = backup_project(project_directory, backup_path)
                 self.log.info('Project backup: %s (%d files, %.1f MB)', backup_path, count, os.path.getsize(backup_path) / 1e6)
+
+                # same backup next to KiCad's automatic backups, so the release history is visible there
+                history_path = os.path.join(get_kicad_backups_path(board_file), get_kicad_backup_name(name, datetime.datetime.now()))
+                os.makedirs(os.path.dirname(history_path), exist_ok=True)
+                shutil.copy2(backup_path, history_path)
+                self.log.info('Backup history: %s', history_path)
             except Exception as e:
                 self.log.error(traceback.format_exc())
                 self.error('Project backup error', str(e))

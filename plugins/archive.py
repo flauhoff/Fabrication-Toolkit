@@ -30,6 +30,25 @@ def get_release_name(drawing_number, index):
     return '{}_{}'.format(normalize_name(drawing_number), normalize_name(index))
 
 
+def get_kicad_backups_path(board_file):
+    '''KiCad's automatic backup folder: <project dir>/<project name>-backups'''
+    project_directory = os.path.dirname(os.path.abspath(board_file))
+    projects = [f for f in os.listdir(project_directory) if f.endswith('.kicad_pro')]
+    if len(projects) == 1:
+        project_name = os.path.splitext(projects[0])[0]
+    else:
+        project_name = os.path.splitext(os.path.basename(board_file))[0]
+    return os.path.join(project_directory, project_name + '-backups')
+
+
+def get_kicad_backup_name(release_name, timestamp):
+    '''
+    Name of the release backup in KiCad's backup folder. It deliberately does not follow KiCad's
+    "<project>-YYYY-MM-DD_HHMMSS.zip" pattern, so KiCad's backup retention never deletes it.
+    '''
+    return 'Freigabe_{}_{}.zip'.format(release_name, timestamp.strftime('%Y-%m-%d_%H%M%S'))
+
+
 def get_release_path(board_file, drawing_number, index):
     project_directory = os.path.dirname(os.path.abspath(board_file))
     return os.path.join(project_directory, releaseFolder, get_release_name(drawing_number, index))

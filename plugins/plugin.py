@@ -8,6 +8,7 @@ from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_
 from .archive import normalize_name, get_release_name, get_release_path
 from .utils import load_user_options, save_user_options, get_layer_names, save_board
 from .debuglog import get_logger
+from .process import ProcessManager
 
 
 # WX GUI form that show the plugin progress
@@ -48,6 +49,9 @@ class KiCadToJLCForm(wx.Frame):
             PROJECT_BACKUP_OPT: True,
         })
 
+        logo = wx.Image(os.path.join(os.path.dirname(__file__), 'logo.png'), wx.BITMAP_TYPE_PNG)
+        self.mLogo = wx.StaticBitmap(self, bitmap=wx.Bitmap(logo))
+
         self.mIndexLabel = wx.StaticText(self, label='Release (Freigabe) - drawing number + index:')
         self.mDrawingNoControl = wx.TextCtrl(self, size=wx.Size(600, 50))
         self.mDrawingNoControl.Hint = "Drawing number (Zeichnungsnummer)"
@@ -55,7 +59,7 @@ class KiCadToJLCForm(wx.Frame):
         self.mIndexControl = wx.TextCtrl(self, size=wx.Size(600, 50))
         self.mIndexControl.Hint = "Index (e.g. A, B, 01)"
         self.mIndexControl.SetValue(userOptions[INDEX_OPT] or pcbnew.GetBoard().GetTitleBlock().GetRevision())
-        self.mSetRevisionCheckbox = wx.CheckBox(self, label='Write index to title block revision (saves the board)')
+        self.mSetRevisionCheckbox = wx.CheckBox(self, label='Write index to title block revision')
         self.mSetRevisionCheckbox.SetValue(userOptions[SET_REVISION_OPT])
         self.mStepExportCheckbox = wx.CheckBox(self, label='Export 3D model (STEP)')
         self.mStepExportCheckbox.SetValue(userOptions[STEP_EXPORT_OPT])
@@ -66,8 +70,6 @@ class KiCadToJLCForm(wx.Frame):
         self.mReleaseControls = [self.mIndexLabel, self.mDrawingNoControl, self.mIndexControl, self.mSetRevisionCheckbox,
                                  self.mStepExportCheckbox, self.mSchematicPdfCheckbox, self.mProjectBackupCheckbox]
 
-        self.mOptionsLabel = wx.StaticText(self, label='Options:')
-        # self.mOptionsSeparator = wx.StaticLine(self)
 
         layers = get_layer_names(pcbnew.GetBoard())
         self.mAdditionalLayersControl = wx.TextCtrl(self, size=wx.Size(600, 50))
@@ -93,8 +95,6 @@ class KiCadToJLCForm(wx.Frame):
         self.mExcludeDnpCheckbox.SetValue(userOptions[EXCLUDE_DNP_OPT])
         self.mOpenBrowserCheckbox = wx.CheckBox(self, label='Open browser after generation')
         self.mOpenBrowserCheckbox.SetValue(userOptions[OPEN_BROWSER_OPT])
-        self.mBackupCheckbox = wx.CheckBox(self, label='Generate backup files')
-        self.mBackupCheckbox.SetValue(userOptions[BACKUP_OPT])
 
         self.mGaugeStatus = wx.Gauge(
             self, wx.ID_ANY, 100, wx.DefaultPosition, wx.Size(600, 20), wx.GA_HORIZONTAL)
@@ -109,10 +109,9 @@ class KiCadToJLCForm(wx.Frame):
 
         boxSizer = wx.BoxSizer(wx.VERTICAL)
 
+        boxSizer.Add(self.mLogo, 0, wx.ALL, 10)
         for control in self.mReleaseControls:
             boxSizer.Add(control, 0, wx.ALL, 5)
-        boxSizer.Add(self.mOptionsLabel, 0, wx.ALL, 5)
-        # boxSizer.Add(self.mOptionsSeparator, 0, wx.ALL, 5)
         boxSizer.Add(self.mArchiveNameControl, 0, wx.ALL, 5)
         boxSizer.Add(self.mAdditionalLayersControl, 0, wx.ALL, 5)
         boxSizer.Add(self.mAllActiveLayersCheckbox, 0, wx.ALL, 5)
@@ -122,7 +121,6 @@ class KiCadToJLCForm(wx.Frame):
         boxSizer.Add(self.mAutomaticFillCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mExcludeDnpCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mOpenBrowserCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mBackupCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mGaugeStatus, 0, wx.ALL, 5)
         boxSizer.Add(self.mStatusText, 0, wx.ALL, 5)
         boxSizer.Add(self.mGenerateButton, 0, wx.ALL, 5)
@@ -160,7 +158,7 @@ class KiCadToJLCForm(wx.Frame):
         options[AUTO_FILL_OPT] = self.mAutomaticFillCheckbox.GetValue()
         options[EXCLUDE_DNP_OPT] = self.mExcludeDnpCheckbox.GetValue()
         options[OPEN_BROWSER_OPT] = self.mOpenBrowserCheckbox.GetValue()
-        options[BACKUP_OPT] = self.mBackupCheckbox.GetValue()
+        options[BACKUP_OPT] = False  # replaced by the project backup of a release
 
         # a release needs both; without them the original Fabrication Toolkit output is created
         has_drawing_no = bool(normalize_name(options[DRAWING_NO_OPT]))
@@ -184,7 +182,6 @@ class KiCadToJLCForm(wx.Frame):
 
         for control in self.mReleaseControls:
             control.Hide()
-        self.mOptionsLabel.Hide()
         self.mArchiveNameControl.Hide()
         self.mAdditionalLayersControl.Hide()
         self.mAllActiveLayersCheckbox.Hide()
@@ -194,22 +191,31 @@ class KiCadToJLCForm(wx.Frame):
         self.mAutomaticFillCheckbox.Hide()
         self.mExcludeDnpCheckbox.Hide()
         self.mOpenBrowserCheckbox.Hide()
-        self.mBackupCheckbox.Hide()
         self.mGenerateButton.Hide()
         self.mGaugeStatus.Show()
         self.mStatusText.Show()
 
-        # Board changes must happen in the GUI thread, not in the background thread
-        if has_index and options[SET_REVISION_OPT]:
+        # Release: DRC, STEP and PDF are created by kicad-cli from the saved files, so fill the
+        # zones, write the index and save the board first. Board changes must happen in the
+        # GUI thread, not in the background thread.
+        if has_drawing_no and has_index:
             board = pcbnew.GetBoard()
             log = get_logger(os.path.dirname(board.GetFileName()))
             try:
-                log.info('Writing index %s to title block and saving board', options[INDEX_OPT])
-                board.GetTitleBlock().SetRevision(options[INDEX_OPT])
+                if options[AUTO_FILL_OPT]:
+                    self.setStatusText('Filling zones')
+                    log.info('Filling zones')
+                    ProcessManager(board).update_zone_fills()
+                if options[SET_REVISION_OPT]:
+                    log.info('Writing index %s to title block', options[INDEX_OPT])
+                    board.GetTitleBlock().SetRevision(options[INDEX_OPT])
+                log.info('Saving board')
                 save_board(board)
             except Exception as e:
-                log.exception('Saving board failed')
-                wx.MessageBox("Saving the board failed:\n{}".format(e), "Schienle_PCB_Freigabe", wx.OK | wx.ICON_ERROR)
+                log.exception('Preparing the board failed')
+                wx.MessageBox("Preparing the board failed:\n{}".format(e), "Schienle_PCB_Freigabe", wx.OK | wx.ICON_ERROR)
+                self.Destroy()
+                return
 
         self.Fit()
         self.SetTitle('Schienle_PCB_Freigabe (Processing...)')

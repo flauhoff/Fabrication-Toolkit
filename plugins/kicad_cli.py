@@ -114,3 +114,22 @@ def export_schematic_pdf(schematic_file, output_file, variables=None, timeout=30
         raise RuntimeError('Schematic PDF export failed (exit code {}):\n{}'.format(returncode, output[-2000:]))
 
     return output_file
+
+
+def run_drc(board_file, report_file, timeout=600, logger=None):
+    '''
+    Runs the design rule check on the (saved) board file and writes a JSON report (KiCad 8+).
+    The exit code is not used to detect violations; the caller evaluates the report.
+    '''
+    cmd = [find_kicad_cli(), 'pcb', 'drc',
+           '--format', 'json',
+           '--units', 'mm',
+           '--severity-all',
+           '--output', report_file,
+           board_file]
+
+    returncode, output = _run(cmd, timeout, logger)
+    if returncode != 0 or not os.path.isfile(report_file):
+        raise RuntimeError('DRC could not be run (exit code {}). The DRC check requires KiCad 8 or newer.\n{}'.format(returncode, output[-2000:]))
+
+    return report_file
