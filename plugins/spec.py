@@ -1,18 +1,20 @@
 import os
 import json
-import html
 import datetime
 
 import pcbnew  # type: ignore
 
+from .pdf import Document, wrap_text
+
 specFileName = 'leiterplattenspezifikation.json'
 specOutputName = 'Leiterplattenspezifikation'
+logoFile = os.path.join(os.path.dirname(__file__), 'schienle-logo.png')
 
 # Field definitions: (key, label, choices, default, required)
 # - choices: list -> editable drop down, None -> free text, 'board' -> read from the board (read only)
 # - default 'board' -> prefilled from the board, but editable
 FIELDS = [
-    ('material',       'Basismaterial',               ['FR4', 'Flex', 'Aluminium', 'Kupferkern', 'Rogers', 'PTFE (Teflon)', 'HDI'], 'FR4', True),
+    ('material',       'Basismaterial',               ['FR4', 'Flex', 'Aluminium', 'Kupferkern'], 'FR4', True),
     ('layers',         'Lagenanzahl',                 'board', '', True),
     ('dimensions',     'Abmessungen [mm]',            'board', '', True),
     ('quantity',       'Menge',                       None, '', False),
@@ -27,6 +29,14 @@ FIELDS = [
     ('contour',        'Konturbearbeitung',           ['gefräst', 'geritzt (V-Cut, gebrochen)', 'gefräst mit Stegen (gebrochen)'], 'gefräst', True),
     ('author',         'Erstellt / freigegeben von',  None, '', True),
     ('notes',          'Bemerkungen',                 None, '', False),
+]
+
+# Grouping of the fields in the PDF
+SECTIONS = [
+    ('Allgemein',              ['material', 'layers', 'dimensions', 'quantity', 'product_type', 'designs', 'delivery']),
+    ('Leiterplatte',           ['thickness', 'material_type', 'surface', 'soldermask', 'silkscreen']),
+    ('Mechanische Bearbeitung', ['contour']),
+    ('Bemerkungen',            ['notes']),
 ]
 
 BOARD_KEYS = [key for key, _, choices, _, _ in FIELDS if choices == 'board']
@@ -120,75 +130,131 @@ def _header(board, index):
 
     board_name = os.path.splitext(os.path.basename(board.GetFileName()))[0]
 
-    return [
-        ('Projekt', title or board_name),
-        ('Leiterplatte (Datei)', os.path.basename(board.GetFileName())),
-        ('Index', index or title_block.GetRevision() or '-'),
-        ('Firma', company or '-'),
-        ('Freigabedatum', datetime.datetime.now().strftime('%Y-%m-%d')),
-    ]
+    return {
+        'title': title or board_name,
+        'file': os.path.basename(board.GetFileName()),
+        'index': index or title_block.GetRevision() or '-',
+        'company': company or '-',
+        'date': datetime.datetime.now().strftime('%d.%m.%Y'),
+    }
 
 
-def _rows(spec):
-    return [(label, (spec.get(key) or '').strip() or '-') for key, label, _, _, _ in FIELDS]
+# PDF layout (points)
+_RED = (231, 50, 56)
+_DARK = (28, 28, 26)
+_GREY = (110, 110, 110)
+_LINE = (205, 205, 205)
+_SHADE = (243, 243, 243)
+_MARGIN = 50
+_LABEL_WIDTH = 185
+_ROW_PADDING = 6
+_FONT_SIZE = 10
+_LINE_HEIGHT = 13
 
 
-def render_text(board, spec, index):
+def render_pdf(board, spec, index, path):
+    labels = {key: label for key, label, _, _, _ in FIELDS}
     header = _header(board, index)
-    rows = _rows(spec)
-    width = max(len(label) for label, _ in header + rows) + 2
 
-    lines = ['LEITERPLATTENSPEZIFIKATION', '=' * 26, '']
-    lines += ['{:<{w}}{}'.format(label + ':', value, w=width) for label, value in header]
-    lines += ['', '-' * 60, '']
-    for label, value in rows:
-        value_lines = value.splitlines() or ['-']
-        lines.append('{:<{w}}{}'.format(label + ':', value_lines[0], w=width))
-        lines += [' ' * width + line for line in value_lines[1:]]
-    lines += ['', 'Bei Abweichungen zwischen Fertigungsdaten und Spezifikation bitte Rücksprache halten.', '']
+    doc = Document()
+    left, right = _MARGIN, doc.width - _MARGIN
+    width = right - left
 
-    return '\r\n'.join(lines)
+    def page_header():
+        doc.image(logoFile, left, 40, w=150)
+        doc.text(right, 62, 'Leiterplattenspezifikation', 'Helvetica-Bold', 18, _DARK, align='right')
+        doc.text(right, 78, header['title'], 'Helvetica', 10, _GREY, align='right')
+        doc.rect(left, 98, width, 2.5, fill=_RED)
+        return 120
+
+    def page_footer():
+        y = doc.height - 40
+        doc.line(left, y - 12, right, y - 12, _LINE)
+        doc.text(left, y, 'Bei Abweichungen zwischen Fertigungsdaten und Spezifikation bitte Rücksprache halten.', 'Helvetica', 8, _GREY)
+        doc.text(right, y, 'Seite {}'.format(len(doc.pages)), 'Helvetica', 8, _GREY, align='right')
+
+    y = page_header()
+
+    # Release data box: index highlighted on the right
+    box_height = 92
+    doc.rect(left, y, width, box_height, fill=_SHADE)
+    doc.rect(right - 110, y, 110, box_height, fill=_DARK)
+    doc.text(right - 55, y + 30, 'INDEX', 'Helvetica', 9, (255, 255, 255), align='center')
+    doc.text(right - 55, y + 66, header['index'], 'Helvetica-Bold', 26, (255, 255, 255), align='center')
+
+    info = [('Projekt', header['title']), ('Leiterplatte', header['file']),
+            ('Firma', header['company']), ('Freigabedatum', header['date']),
+            ('Freigegeben von', (spec.get('author') or '').strip() or '-')]
+    columns = [info[:3], info[3:]]
+    column_width = (width - 110) / 2
+    for column, rows in enumerate(columns):
+        x = left + 12 + column * column_width
+        for row, (label, value) in enumerate(rows):
+            ry = y + 22 + row * 26
+            doc.text(x, ry, label.upper(), 'Helvetica', 7, _GREY)
+            value = wrap_text(value, 'Helvetica-Bold', 10, column_width - 20)[0]
+            doc.text(x, ry + 10, value, 'Helvetica-Bold', 10, _DARK)
+    y += box_height + 26
+
+    value_x = left + _LABEL_WIDTH + 10
+    value_width = right - value_x - 8
+
+    for title, keys in SECTIONS:
+        rows = [(labels[k], (spec.get(k) or '').strip() or '-') for k in keys]
+        if title == 'Bemerkungen' and rows[0][1] == '-':
+            continue
+
+        if y + 50 > doc.height - 70:
+            page_footer()
+            doc.new_page()
+            y = page_header()
+
+        doc.text(left, y, title.upper(), 'Helvetica-Bold', 10, _RED)
+        y += 7
+
+        bottom = doc.height - 70
+        for number, (label, value) in enumerate(rows):
+            is_text = title == 'Bemerkungen'
+            lines = wrap_text(value, 'Helvetica', _FONT_SIZE, width - 16) if is_text else \
+                wrap_text(value, 'Helvetica-Bold', _FONT_SIZE, value_width)
+
+            # Long values (notes) are continued on the next page
+            while lines:
+                fitting = int((bottom - y - 2 * _ROW_PADDING) // _LINE_HEIGHT)
+                if fitting < min(len(lines), 3):
+                    page_footer()
+                    doc.new_page()
+                    y = page_header()
+                    continue
+
+                chunk, lines = lines[:fitting], lines[fitting:]
+                row_height = len(chunk) * _LINE_HEIGHT + 2 * _ROW_PADDING
+
+                if not is_text:
+                    doc.rect(left, y, _LABEL_WIDTH, row_height, fill=_SHADE)
+                doc.line(left, y + row_height, right, y + row_height, _LINE)
+                if number == 0:
+                    doc.line(left, y, right, y, _DARK, 1)
+
+                text_y = y + _ROW_PADDING + _FONT_SIZE
+                if not is_text:
+                    doc.text(left + 8, text_y, label, 'Helvetica', _FONT_SIZE, _GREY)
+                for line in chunk:
+                    if is_text:
+                        doc.text(left + 8, text_y, line, 'Helvetica', _FONT_SIZE, _DARK)
+                    else:
+                        doc.text(value_x, text_y, line, 'Helvetica-Bold', _FONT_SIZE, _DARK)
+                    text_y += _LINE_HEIGHT
+                y += row_height
+
+        y += 22
+
+    page_footer()
+    doc.save(path)
+    return path
 
 
-def render_html(board, spec, index):
-    def table(rows):
-        return '\n'.join('<tr><th>{}</th><td>{}</td></tr>'.format(
-            html.escape(label), html.escape(value).replace('\n', '<br>')) for label, value in rows)
-
-    return '''<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<title>Leiterplattenspezifikation</title>
-<style>
-  body {{ font-family: Arial, Helvetica, sans-serif; margin: 2em; color: #000; }}
-  h1 {{ font-size: 1.4em; border-bottom: 2px solid #000; padding-bottom: .3em; }}
-  table {{ border-collapse: collapse; width: 100%; max-width: 50em; margin-bottom: 1.5em; }}
-  th, td {{ border: 1px solid #888; padding: .35em .6em; text-align: left; vertical-align: top; }}
-  th {{ width: 40%; background: #eee; font-weight: normal; }}
-  p {{ font-size: .9em; }}
-</style>
-</head>
-<body>
-<h1>Leiterplattenspezifikation</h1>
-<table>
-{}
-</table>
-<table>
-{}
-</table>
-<p>Bei Abweichungen zwischen Fertigungsdaten und Spezifikation bitte R&uuml;cksprache halten.</p>
-</body>
-</html>
-'''.format(table(_header(board, index)), table(_rows(spec)))
-
-
-def write_spec_files(board, spec, index, text_dirs, html_dir):
-    '''Writes the specification as text into each of `text_dirs` and as printable HTML into `html_dir`.'''
-    text = render_text(board, spec, index)
-    for directory in text_dirs:
-        with open(os.path.join(directory, specOutputName + '.txt'), 'w', encoding='utf-8-sig', newline='') as f:
-            f.write(text)
-
-    with open(os.path.join(html_dir, specOutputName + '.html'), 'w', encoding='utf-8') as f:
-        f.write(render_html(board, spec, index))
+def write_spec_files(board, spec, index, directories):
+    '''Writes the specification as PDF into each of the given directories.'''
+    for directory in directories:
+        render_pdf(board, spec, index, os.path.join(directory, specOutputName + '.pdf'))
