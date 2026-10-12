@@ -57,6 +57,10 @@ Options can be set in the dialog that appears when the plugin is invoked. They a
 
 ☑ __Export 3D model (STEP)__: Exports the board incl. component models as `<Title>_Index_<INDEX>.step` next to the fabrication data (and therefore also into the project archive). Uses `kicad-cli` (KiCad 7+) on the **saved** board file, so save the board first (it is saved automatically when the index is written to the title block).</br>
 
+☑ __Add PCB specification (Leiterplattenspezifikation)__: Adds the PCB specification to the release. It is filled in via __Edit PCB specification...__ (or automatically opened on release if it is missing or incomplete) and stored in `leiterplattenspezifikation.json` in the project directory, so it is versioned and archived with the project. On release it is written as `<Title>_Index_<INDEX>_Leiterplattenspezifikation.txt` into the gerber archive and next to the fabrication data, plus a printable `.html` version (print to PDF if needed).</br>
+
+The form contains the basic fabrication requirements: base material, board thickness, copper thickness (outer/inner layers), surface finish, solder mask and silkscreen colour, IPC class, electrical test, impedance control, delivery unit (single board / panel), quantity, author and notes. Layer count, board dimensions, smallest track width, smallest drill and the clearance design rule are read from the board at release time; the board thickness is prefilled from the board setup.
+
 When an index is set, the fabrication data is written to `production/Index_<INDEX>/` instead of `production/`, so every index keeps its own data set.
 
 ### Fabrication options

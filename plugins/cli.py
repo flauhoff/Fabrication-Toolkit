@@ -25,6 +25,7 @@ if __name__ == '__main__':
     parser.add_argument("--archiveProject",     "-aP", action="store_true", help="Archive the complete project as archive/<project>_Index_<INDEX>.zip")
     parser.add_argument("--overwriteArchive",   "-oA", action="store_true", help="Overwrite an existing project archive of the same index")
     parser.add_argument("--stepExport",         "-st", action="store_true", help="Export the 3D model as STEP (requires KiCad 7+)")
+    parser.add_argument("--specification",      "-sp", action="store_true", help="Add the PCB specification (leiterplattenspezifikation.json, filled in via the plugin)")
     args = parser.parse_args()
 
     if (args.setRevision or args.archiveProject) and not args.index:
@@ -45,6 +46,7 @@ if __name__ == '__main__':
     options[ARCHIVE_PROJECT_OPT] = args.archiveProject
     options[OVERWRITE_ARCHIVE_OPT] = args.overwriteArchive
     options[STEP_EXPORT_OPT] = args.stepExport
+    options[SPEC_OPT] = args.specification
     
     openBrowser = args.openBrowser
     nonInteractive = args.nonInteractive

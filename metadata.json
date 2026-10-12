@@ -2,7 +2,7 @@
     "$schema": "https://go.kicad.org/pcm/schemas/v1",
     "name": "Schienle_PCB_Freigabe",
     "description": "PCB-Freigabe mit Index und Projektarchiv",
-    "description_full": "Freigabe-Workflow fuer KiCad-Projekte. \n\n Features: \n• Eingabe eines Index, der in die Revision des Schriftfelds uebernommen wird. \n• Erstellt Fertigungsdaten (Gerber, Bohrdaten, BOM, Bestueckungsliste) pro Index. \n• Archiviert das komplette Projekt mit Index-Bezeichnung. \n\nBasiert auf dem Fabrication Toolkit von Benny Megidish (Apache-2.0): https://github.com/bennymeg/Fabrication-Toolkit",
+    "description_full": "Freigabe-Workflow fuer KiCad-Projekte. \n\n Features: \n• Eingabe eines Index, der in die Revision des Schriftfelds uebernommen wird. \n• Erstellt Fertigungsdaten (Gerber, Bohrdaten, BOM, Bestueckungsliste) pro Index. \n• Archiviert das komplette Projekt mit Index-Bezeichnung. \n• Leiterplattenspezifikation als Formular, wird bei der Freigabe zu den Fertigungsdaten hinzugefuegt. \n\nBasiert auf dem Fabrication Toolkit von Benny Megidish (Apache-2.0): https://github.com/bennymeg/Fabrication-Toolkit",
     "identifier": "com.schienle.Schienle_PCB_Freigabe",
     "type": "plugin",
     "author": {

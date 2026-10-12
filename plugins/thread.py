@@ -10,6 +10,7 @@ from threading import Thread
 from .events import StatusEvent
 from .process import ProcessManager
 from .archive import archive_project, normalize_index, get_index_folder_name
+from .spec import spec_exists, load_spec, write_spec_files, specOutputName
 from .step import export_step, stepFileName
 from .config import *
 from .options import *
@@ -129,6 +130,16 @@ class ProcessThread(Thread):
                     else:
                         wx.MessageBox(str(e), "Schienle_PCB_Freigabe - STEP export error", wx.OK | wx.ICON_ERROR)
 
+            # PCB specification: as text inside the gerber archive, as text and printable HTML next to it
+            if self.options.get(SPEC_OPT):
+                self.progress(80)
+                if spec_exists(board_file):
+                    spec = load_spec(board_file, self.process_manager.board)
+                    write_spec_files(self.process_manager.board, spec, self.options.get(INDEX_OPT),
+                                     [temp_dir_gerber, temp_dir], temp_dir)
+                elif self.wx is None:
+                    logging.error("Schienle_PCB_Freigabe - No PCB specification found, it was not added")
+
             # generate production archive
             self.progress(85)
             temp_file = self.process_manager.generate_archive(temp_dir_gerber, temp_file)
@@ -190,6 +201,10 @@ class ProcessThread(Thread):
 
         if os.path.exists(os.path.join(temp_dir, stepFileName)):
             os.rename(os.path.join(temp_dir, stepFileName), os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + '.step').split()))))
+
+        for extension in ('.txt', '.html'):
+            if os.path.exists(os.path.join(temp_dir, specOutputName + extension)):
+                os.rename(os.path.join(temp_dir, specOutputName + extension), os.path.join(temp_dir, ProcessManager.normalize_filename("_".join((baseName.strip() + '_' + specOutputName + extension).split()))))
 
         if self.options[ARCHIVE_NAME]:
             if os.path.exists(os.path.join(temp_dir, designatorsFileName)):

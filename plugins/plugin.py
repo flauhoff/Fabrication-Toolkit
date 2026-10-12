@@ -4,7 +4,9 @@ import pcbnew  # type: ignore
 
 from .thread import ProcessThread
 from .events import StatusEvent
-from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, ARCHIVE_PROJECT_OPT, OVERWRITE_ARCHIVE_OPT, STEP_EXPORT_OPT
+from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, ARCHIVE_PROJECT_OPT, OVERWRITE_ARCHIVE_OPT, STEP_EXPORT_OPT, SPEC_OPT
+from .spec import spec_exists, load_spec, missing_fields
+from .spec_dialog import SpecDialog
 from .archive import normalize_index, get_project_archive_path
 from .utils import load_user_options, save_user_options, get_layer_names
 
@@ -43,6 +45,7 @@ class KiCadToJLCForm(wx.Frame):
             SET_REVISION_OPT: True,
             ARCHIVE_PROJECT_OPT: True,
             STEP_EXPORT_OPT: True,
+            SPEC_OPT: True,
         })
 
         self.mIndexLabel = wx.StaticText(self, label='Index:')
@@ -56,6 +59,11 @@ class KiCadToJLCForm(wx.Frame):
 
         self.mStepExportCheckbox = wx.CheckBox(self, label='Export 3D model (STEP)')
         self.mStepExportCheckbox.SetValue(userOptions[STEP_EXPORT_OPT])
+
+        self.mSpecCheckbox = wx.CheckBox(self, label='Add PCB specification (Leiterplattenspezifikation)')
+        self.mSpecCheckbox.SetValue(userOptions[SPEC_OPT])
+        self.mSpecButton = wx.Button(self, label='Edit PCB specification...')
+        self.mSpecButton.Bind(wx.EVT_BUTTON, self.onSpecButtonClick)
 
         self.mOptionsLabel = wx.StaticText(self, label='Options:')
         # self.mOptionsSeparator = wx.StaticLine(self)
@@ -102,6 +110,8 @@ class KiCadToJLCForm(wx.Frame):
         boxSizer.Add(self.mSetRevisionCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mArchiveProjectCheckbox, 0, wx.ALL, 5)
         boxSizer.Add(self.mStepExportCheckbox, 0, wx.ALL, 5)
+        boxSizer.Add(self.mSpecCheckbox, 0, wx.ALL, 5)
+        boxSizer.Add(self.mSpecButton, 0, wx.ALL, 5)
         boxSizer.Add(self.mOptionsLabel, 0, wx.ALL, 5)
         # boxSizer.Add(self.mOptionsSeparator, 0, wx.ALL, 5)
         boxSizer.Add(self.mArchiveNameControl, 0, wx.ALL, 5)
@@ -133,12 +143,24 @@ class KiCadToJLCForm(wx.Frame):
         else:
             event.Skip()
 
+    # Opens the PCB specification form, returns True if it was saved
+    def editSpec(self):
+        dialog = SpecDialog(self, pcbnew.GetBoard())
+        try:
+            return dialog.ShowModal() == wx.ID_OK
+        finally:
+            dialog.Destroy()
+
+    def onSpecButtonClick(self, event):
+        self.editSpec()
+
     def onGenerateButtonClick(self, event):
         options = dict()
         options[INDEX_OPT] = self.mIndexControl.GetValue().strip()
         options[SET_REVISION_OPT] = self.mSetRevisionCheckbox.GetValue()
         options[ARCHIVE_PROJECT_OPT] = self.mArchiveProjectCheckbox.GetValue()
         options[STEP_EXPORT_OPT] = self.mStepExportCheckbox.GetValue()
+        options[SPEC_OPT] = self.mSpecCheckbox.GetValue()
         options[ARCHIVE_NAME] = self.mArchiveNameControl.GetValue()
         options[EXTRA_LAYERS] = self.mAdditionalLayersControl.GetValue()
         options[ALL_ACTIVE_LAYERS_OPT] = self.mAllActiveLayersCheckbox.GetValue()
@@ -154,6 +176,13 @@ class KiCadToJLCForm(wx.Frame):
             wx.MessageBox("Please enter an index.", "Schienle_PCB_Freigabe", wx.OK | wx.ICON_WARNING)
             self.mIndexControl.SetFocus()
             return
+
+        # The specification has to be filled in (and complete) before it can be released
+        if options[SPEC_OPT]:
+            board = pcbnew.GetBoard()
+            if not spec_exists(board.GetFileName()) or missing_fields(load_spec(board.GetFileName(), board)):
+                if not self.editSpec():
+                    return
 
         options[OVERWRITE_ARCHIVE_OPT] = False
         if options[ARCHIVE_PROJECT_OPT]:
@@ -172,6 +201,8 @@ class KiCadToJLCForm(wx.Frame):
         self.mSetRevisionCheckbox.Hide()
         self.mArchiveProjectCheckbox.Hide()
         self.mStepExportCheckbox.Hide()
+        self.mSpecCheckbox.Hide()
+        self.mSpecButton.Hide()
         self.mOptionsLabel.Hide()
         self.mArchiveNameControl.Hide()
         self.mAdditionalLayersControl.Hide()
