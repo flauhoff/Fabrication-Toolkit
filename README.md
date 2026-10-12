@@ -43,13 +43,15 @@ Die Kopie in `<Projekt>-backups/` zeigt die Freigabe-Historie neben den automati
 
 ## Zeichnungsnummer und Index
 
-Empfohlen: **`ZEICHNUNGSNUMMER` und `INDEX` als Projekt-Textvariablen anlegen** (Datei → Board Setup bzw. Schaltplan-Setup → Text Variables) und in den Schriftfeldern von Schaltplan und Platine `${INDEX}` (und ggf. `${ZEICHNUNGSNUMMER}`) verwenden. Dann
+Die **Zeichnungsnummer** wird im Dialog eingegeben und pro Projekt gespeichert.
 
-- zeigen Schaltplan, Platine und alle PDFs immer denselben Stand,
-- übernimmt das Plugin die Werte automatisch (Felder grau, nicht änderbar),
+Für den **Index** empfohlen: **`INDEX` als Projekt-Textvariable anlegen** (Datei → Board Setup bzw. Schaltplan-Setup → Text Variables) und in den Schriftfeldern von Schaltplan und Platine `${INDEX}` als Revision verwenden. Dann
+
+- zeigen Schaltplan, Platine und alle PDFs immer denselben Index,
+- übernimmt das Plugin den Index automatisch (Feld grau, nicht änderbar),
 - bleibt eine Revision `${INDEX}` im Platinen-Schriftfeld erhalten (sie wird nicht durch den Wert ersetzt).
 
-Ohne Projektvariablen werden Zeichnungsnummer und Index im Dialog eingegeben und pro Projekt gespeichert. Vor der Freigabe prüft das Plugin, ob die Revision im (gespeicherten) Schaltplan-Schriftfeld zum Index passt, und fragt bei Abweichung nach.
+Ohne Projektvariable wird der Index im Dialog eingegeben. Vor der Freigabe prüft das Plugin, ob die Revision im (gespeicherten) Schaltplan-Schriftfeld zum Index passt, und fragt bei Abweichung nach. Im Schaltplan-PDF steht zusätzlich `${ZEICHNUNGSNUMMER}` mit der eingegebenen Zeichnungsnummer zur Verfügung.
 
 ## Optionen (Reiter „Freigabe“)
 

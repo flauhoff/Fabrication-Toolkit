@@ -99,28 +99,26 @@ class ReleaseForm(wx.Frame):
         self.mNotebook.AddPage(page, 'Freigabe')
         sizer = wx.BoxSizer(wx.VERTICAL)
 
-        # drawing number and index: the project text variables are the source, if they are defined
-        drawing_no_var = get_project_variable(board, 'ZEICHNUNGSNUMMER')
+        # drawing number is entered manually; the index comes from the project text variable INDEX, if defined
         index_var = get_project_variable(board, 'INDEX')
 
         grid = wx.FlexGridSizer(cols=2, vgap=6, hgap=10)
         grid.AddGrowableCol(1)
-        self.mDrawingNoControl = wx.TextCtrl(page, value=drawing_no_var or userOptions[DRAWING_NO_OPT])
+        self.mDrawingNoControl = wx.TextCtrl(page, value=userOptions[DRAWING_NO_OPT])
         self.mIndexControl = wx.TextCtrl(page, value=index_var or userOptions[INDEX_OPT] or board.GetTitleBlock().GetRevision())
         self.mIndexControl.SetHint('z. B. A, B, 01')
-        for control, value in ((self.mDrawingNoControl, drawing_no_var), (self.mIndexControl, index_var)):
-            if value is not None:
-                _read_only(control, 'Aus der Projekt-Textvariable (Datei → Board Setup → Text Variables)')
+        if index_var is not None:
+            _read_only(self.mIndexControl, 'Aus der Projekt-Textvariable INDEX (Datei → Board Setup → Text Variables)')
         grid.Add(wx.StaticText(page, label='Zeichnungsnummer'), 0, wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.mDrawingNoControl, 1, wx.EXPAND)
         grid.Add(wx.StaticText(page, label='Index'), 0, wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.mIndexControl, 1, wx.EXPAND)
         sizer.Add(grid, 0, wx.ALL | wx.EXPAND, 10)
 
-        if drawing_no_var is None or index_var is None:
-            hint = wx.StaticText(page, label='Tipp: ZEICHNUNGSNUMMER und INDEX als Projekt-Textvariablen anlegen und in den '
-                                             'Schriftfeldern ${INDEX} verwenden – dann zeigen Schaltplan und Platine immer '
-                                             'denselben Stand und werden hier automatisch übernommen.')
+        if index_var is None:
+            hint = wx.StaticText(page, label='Tipp: INDEX als Projekt-Textvariable anlegen und in den Schriftfeldern '
+                                             '${INDEX} verwenden – dann zeigen Schaltplan und Platine immer denselben '
+                                             'Index und er wird hier automatisch übernommen.')
             hint.SetForegroundColour(HINT_COLOUR)
             hint.Wrap(570)
             sizer.Add(hint, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
