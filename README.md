@@ -68,6 +68,7 @@ A release always
     ├── <name>_netlist.ipc
     ├── <name>.step                          3D model
     ├── <name>_Schaltplan.pdf                all schematic sheets
+    ├── <name>_Leiterplattenspezifikation.pdf PCB specification (second tab of the dialog)
     ├── <name>_DRC-Bericht.txt               DRC result (warnings)
     └── <name>_Projekt-Backup.zip            project at release time
 
@@ -80,6 +81,7 @@ The copy in `<project>-backups/` shows the release history next to KiCad's autom
 ☑ __Write index to title block revision__: Sets the board's title block revision to the index and saves the board *before* plotting, so `${REVISION}` on the PCB already shows the new index.</br>
 ☑ __Export 3D model (STEP)__: Uses `kicad-cli` (KiCad 7+) on the **saved** board file.</br>
 ☑ __Export schematic as PDF__: Plots `<project>.kicad_sch` (all sheets) with `kicad-cli` (KiCad 7+) from the **saved** schematic. On KiCad 8+ the text variables `${ZEICHNUNGSNUMMER}` and `${INDEX}` are available in the schematic (e.g. in the title block).</br>
+☑ __Create PCB specification__: Creates `<name>_Leiterplattenspezifikation.pdf` from the second tab of the dialog (header, base material, layer count, dimensions, thickness, material type, surface finish, solder mask / silkscreen color, via filling, contour machining, remarks). Layer count, dimensions and thickness are read from the board; all other values are remembered per project. The PDF is written without additional Python packages.</br>
 ☑ __Create project backup__: Zips the complete project directory (also copied to `<project>-backups/`) (schematics, board, libraries, 3D models, ...). `Freigaben/`, `production/`, backups, lock files, `fp-info-cache` and VCS folders are excluded.</br>
 
 An existing release with the same drawing number and index is only overwritten after confirmation. Drawing number and index are remembered per project.

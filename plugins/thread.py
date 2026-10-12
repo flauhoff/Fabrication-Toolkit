@@ -15,6 +15,8 @@ from .archive import backup_project, normalize_name, get_release_name, get_relea
 from .archive import get_kicad_backups_path, get_kicad_backup_name
 from .kicad_cli import export_step, export_schematic_pdf, run_drc, stepFileName
 from .drc import load_drc_report, format_drc_summary
+from .specpdf import write_spec_pdf
+from . import spec
 from .config import *
 from .options import *
 from .utils import print_cli_progress_bar, save_board
@@ -269,6 +271,28 @@ class ProcessThread(Thread):
                                      logger=self.log)
             except Exception as e:
                 self.error('Schematic PDF error', str(e))
+
+        # PCB specification (Leiterplattenspezifikation)
+        if self.options.get(PCB_SPEC_OPT):
+            self.step(83, 'Creating PCB specification')
+            try:
+                values = spec.defaults()
+                values.update(self.options.get(PCB_SPEC_VALUES) or {})
+                header = {
+                    'projekt': values.get('projekt', ''),
+                    'leiterplatte': os.path.basename(board_file),
+                    'firma': values.get('firma', ''),
+                    'freigabedatum': datetime.datetime.now().strftime('%d.%m.%Y'),
+                    'freigegeben_von': values.get('freigegeben_von', ''),
+                    'zeichnungsnummer': self.options[DRAWING_NO_OPT].strip(),
+                    'index': self.options[INDEX_OPT].strip(),
+                }
+                write_spec_pdf(os.path.join(temp_dir, name + '_Leiterplattenspezifikation.pdf'), header,
+                               spec.build_sections(values), values.get('bemerkungen', ''),
+                               os.path.join(os.path.dirname(__file__), 'logo_pdf.jpg'))
+            except Exception as e:
+                self.log.error(traceback.format_exc())
+                self.error('PCB specification error', str(e))
 
         self.step(85, 'Copying files to release folder')
         shutil.copytree(temp_dir, release_path)

@@ -4,7 +4,8 @@ import pcbnew  # type: ignore
 
 from .thread import ProcessThread
 from .events import StatusEvent
-from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, STEP_EXPORT_OPT, DRAWING_NO_OPT, SCHEMATIC_PDF_OPT, PROJECT_BACKUP_OPT, OVERWRITE_RELEASE_OPT
+from .options import AUTO_FILL_OPT, AUTO_TRANSLATE_OPT, EXCLUDE_DNP_OPT, EXTEND_EDGE_CUT_OPT, ALTERNATIVE_EDGE_CUT_OPT, EXTRA_LAYERS, ALL_ACTIVE_LAYERS_OPT, ARCHIVE_NAME, OPEN_BROWSER_OPT, BACKUP_OPT, INDEX_OPT, SET_REVISION_OPT, STEP_EXPORT_OPT, DRAWING_NO_OPT, SCHEMATIC_PDF_OPT, PROJECT_BACKUP_OPT, OVERWRITE_RELEASE_OPT, PCB_SPEC_OPT, PCB_SPEC_VALUES
+from . import spec
 from .archive import normalize_name, get_release_name, get_release_path
 from .utils import load_user_options, save_user_options, get_layer_names, save_board
 from .debuglog import get_logger
@@ -30,6 +31,7 @@ class KiCadToJLCForm(wx.Frame):
 
         self.SetSizeHints(wx.Size(600, 100), wx.DefaultSize)
 
+        board = pcbnew.GetBoard()
         userOptions = load_user_options({
             EXTRA_LAYERS: "",
             ALL_ACTIVE_LAYERS_OPT: False,
@@ -47,54 +49,70 @@ class KiCadToJLCForm(wx.Frame):
             STEP_EXPORT_OPT: True,
             SCHEMATIC_PDF_OPT: True,
             PROJECT_BACKUP_OPT: True,
+            PCB_SPEC_OPT: True,
+            PCB_SPEC_VALUES: {},
         })
 
         logo = wx.Image(os.path.join(os.path.dirname(__file__), 'logo.png'), wx.BITMAP_TYPE_PNG)
         self.mLogo = wx.StaticBitmap(self, bitmap=wx.Bitmap(logo))
 
-        self.mIndexLabel = wx.StaticText(self, label='Release (Freigabe) - drawing number + index:')
-        self.mDrawingNoControl = wx.TextCtrl(self, size=wx.Size(600, 50))
+        self.mNotebook = wx.Notebook(self)
+        page = wx.Panel(self.mNotebook)
+        self.mNotebook.AddPage(page, 'Freigabe')
+
+        self.mIndexLabel = wx.StaticText(page, label='Release (Freigabe) - drawing number + index:')
+        self.mDrawingNoControl = wx.TextCtrl(page, size=wx.Size(600, 50))
         self.mDrawingNoControl.Hint = "Drawing number (Zeichnungsnummer)"
         self.mDrawingNoControl.SetValue(userOptions[DRAWING_NO_OPT])
-        self.mIndexControl = wx.TextCtrl(self, size=wx.Size(600, 50))
+        self.mIndexControl = wx.TextCtrl(page, size=wx.Size(600, 50))
         self.mIndexControl.Hint = "Index (e.g. A, B, 01)"
-        self.mIndexControl.SetValue(userOptions[INDEX_OPT] or pcbnew.GetBoard().GetTitleBlock().GetRevision())
-        self.mSetRevisionCheckbox = wx.CheckBox(self, label='Write index to title block revision')
+        self.mIndexControl.SetValue(userOptions[INDEX_OPT] or board.GetTitleBlock().GetRevision())
+        self.mSetRevisionCheckbox = wx.CheckBox(page, label='Write index to title block revision')
         self.mSetRevisionCheckbox.SetValue(userOptions[SET_REVISION_OPT])
-        self.mStepExportCheckbox = wx.CheckBox(self, label='Export 3D model (STEP)')
+        self.mStepExportCheckbox = wx.CheckBox(page, label='Export 3D model (STEP)')
         self.mStepExportCheckbox.SetValue(userOptions[STEP_EXPORT_OPT])
-        self.mSchematicPdfCheckbox = wx.CheckBox(self, label='Export schematic as PDF')
+        self.mSchematicPdfCheckbox = wx.CheckBox(page, label='Export schematic as PDF')
         self.mSchematicPdfCheckbox.SetValue(userOptions[SCHEMATIC_PDF_OPT])
-        self.mProjectBackupCheckbox = wx.CheckBox(self, label='Create project backup')
+        self.mPcbSpecCheckbox = wx.CheckBox(page, label='Create PCB specification (Leiterplattenspezifikation, PDF)')
+        self.mPcbSpecCheckbox.SetValue(userOptions[PCB_SPEC_OPT])
+        self.mProjectBackupCheckbox = wx.CheckBox(page, label='Create project backup')
         self.mProjectBackupCheckbox.SetValue(userOptions[PROJECT_BACKUP_OPT])
-        self.mReleaseControls = [self.mIndexLabel, self.mDrawingNoControl, self.mIndexControl, self.mSetRevisionCheckbox,
-                                 self.mStepExportCheckbox, self.mSchematicPdfCheckbox, self.mProjectBackupCheckbox]
 
-
-        layers = get_layer_names(pcbnew.GetBoard())
-        self.mAdditionalLayersControl = wx.TextCtrl(self, size=wx.Size(600, 50))
+        layers = get_layer_names(board)
+        self.mAdditionalLayersControl = wx.TextCtrl(page, size=wx.Size(600, 50))
         self.mAdditionalLayersControl.Hint = "Additional layers (comma-separated) [optional]"
         self.mAdditionalLayersControl.AutoComplete(layers)
         self.mAdditionalLayersControl.Enable()
         self.mAdditionalLayersControl.SetValue(userOptions[EXTRA_LAYERS])
-        self.mArchiveNameControl = wx.TextCtrl(self, size=wx.Size(600, 50))
+        self.mArchiveNameControl = wx.TextCtrl(page, size=wx.Size(600, 50))
         self.mArchiveNameControl.Hint = "Archive name (e.g. ${TITLE}_${REVISION}) [optional]"
         self.mArchiveNameControl.Enable()
         self.mArchiveNameControl.SetValue(userOptions[ARCHIVE_NAME])
-        self.mAllActiveLayersCheckbox = wx.CheckBox(self, label='Plot all active layers')
+        self.mAllActiveLayersCheckbox = wx.CheckBox(page, label='Plot all active layers')
         self.mAllActiveLayersCheckbox.SetValue(userOptions[ALL_ACTIVE_LAYERS_OPT])
-        self.mExtendEdgeCutsCheckbox = wx.CheckBox(self, label='Set User.1 as V-Cut layer')
+        self.mExtendEdgeCutsCheckbox = wx.CheckBox(page, label='Set User.1 as V-Cut layer')
         self.mExtendEdgeCutsCheckbox.SetValue(userOptions[EXTEND_EDGE_CUT_OPT])
-        self.mAlternativeEdgeCutsCheckbox = wx.CheckBox(self, label='Set User.2 as alternative Edge-Cut layer')
+        self.mAlternativeEdgeCutsCheckbox = wx.CheckBox(page, label='Set User.2 as alternative Edge-Cut layer')
         self.mAlternativeEdgeCutsCheckbox.SetValue(userOptions[ALTERNATIVE_EDGE_CUT_OPT])
-        self.mAutomaticTranslationCheckbox = wx.CheckBox(self, label='Apply automatic component translations')
+        self.mAutomaticTranslationCheckbox = wx.CheckBox(page, label='Apply automatic component translations')
         self.mAutomaticTranslationCheckbox.SetValue(userOptions[AUTO_TRANSLATE_OPT])
-        self.mAutomaticFillCheckbox = wx.CheckBox(self, label='Apply automatic fill for all zones')
+        self.mAutomaticFillCheckbox = wx.CheckBox(page, label='Apply automatic fill for all zones')
         self.mAutomaticFillCheckbox.SetValue(userOptions[AUTO_FILL_OPT])
-        self.mExcludeDnpCheckbox = wx.CheckBox(self, label='Exclude DNP components from BOM')
+        self.mExcludeDnpCheckbox = wx.CheckBox(page, label='Exclude DNP components from BOM')
         self.mExcludeDnpCheckbox.SetValue(userOptions[EXCLUDE_DNP_OPT])
-        self.mOpenBrowserCheckbox = wx.CheckBox(self, label='Open browser after generation')
+        self.mOpenBrowserCheckbox = wx.CheckBox(page, label='Open browser after generation')
         self.mOpenBrowserCheckbox.SetValue(userOptions[OPEN_BROWSER_OPT])
+
+        pageSizer = wx.BoxSizer(wx.VERTICAL)
+        for control in (self.mIndexLabel, self.mDrawingNoControl, self.mIndexControl, self.mSetRevisionCheckbox,
+                        self.mStepExportCheckbox, self.mSchematicPdfCheckbox, self.mPcbSpecCheckbox, self.mProjectBackupCheckbox,
+                        self.mArchiveNameControl, self.mAdditionalLayersControl, self.mAllActiveLayersCheckbox,
+                        self.mExtendEdgeCutsCheckbox, self.mAlternativeEdgeCutsCheckbox, self.mAutomaticTranslationCheckbox,
+                        self.mAutomaticFillCheckbox, self.mExcludeDnpCheckbox, self.mOpenBrowserCheckbox):
+            pageSizer.Add(control, 0, wx.ALL, 5)
+        page.SetSizer(pageSizer)
+
+        self.mSpecControls = self.createSpecPage(board, userOptions[PCB_SPEC_VALUES])
 
         self.mGaugeStatus = wx.Gauge(
             self, wx.ID_ANY, 100, wx.DefaultPosition, wx.Size(600, 20), wx.GA_HORIZONTAL)
@@ -108,19 +126,8 @@ class KiCadToJLCForm(wx.Frame):
         self.mGenerateButton.Bind(wx.EVT_BUTTON, self.onGenerateButtonClick)
 
         boxSizer = wx.BoxSizer(wx.VERTICAL)
-
         boxSizer.Add(self.mLogo, 0, wx.ALL, 10)
-        for control in self.mReleaseControls:
-            boxSizer.Add(control, 0, wx.ALL, 5)
-        boxSizer.Add(self.mArchiveNameControl, 0, wx.ALL, 5)
-        boxSizer.Add(self.mAdditionalLayersControl, 0, wx.ALL, 5)
-        boxSizer.Add(self.mAllActiveLayersCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mExtendEdgeCutsCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mAlternativeEdgeCutsCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mAutomaticTranslationCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mAutomaticFillCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mExcludeDnpCheckbox, 0, wx.ALL, 5)
-        boxSizer.Add(self.mOpenBrowserCheckbox, 0, wx.ALL, 5)
+        boxSizer.Add(self.mNotebook, 0, wx.ALL | wx.EXPAND, 5)
         boxSizer.Add(self.mGaugeStatus, 0, wx.ALL, 5)
         boxSizer.Add(self.mStatusText, 0, wx.ALL, 5)
         boxSizer.Add(self.mGenerateButton, 0, wx.ALL, 5)
@@ -133,6 +140,57 @@ class KiCadToJLCForm(wx.Frame):
 
         # Bind the ESC key event to a handler
         self.Bind(wx.EVT_CHAR_HOOK, self.onKey)
+
+    def createSpecPage(self, board, stored):
+        '''Second tab: the PCB specification form. Returns {key: control}.'''
+        page = wx.ScrolledWindow(self.mNotebook)
+        page.SetScrollRate(0, 10)
+        self.mNotebook.AddPage(page, 'Leiterplattenspezifikation')
+
+        values = spec.defaults()
+        values.update(spec.board_values(board))
+        values.update({k: v for k, v in (stored or {}).items() if k not in spec.BOARD_KEYS and v})
+
+        controls = {}
+        grid = wx.FlexGridSizer(cols=2, vgap=4, hgap=10)
+        grid.AddGrowableCol(1)
+
+        def heading(text):
+            label = wx.StaticText(page, label=text)
+            label.SetFont(label.GetFont().Bold())
+            label.SetForegroundColour(wx.Colour(231, 50, 56))
+            grid.Add(label, 0, wx.TOP, 10)
+            grid.Add((0, 0))
+
+        def row(key, text, control):
+            grid.Add(wx.StaticText(page, label=text), 0, wx.ALIGN_CENTER_VERTICAL)
+            grid.Add(control, 1, wx.EXPAND)
+            controls[key] = control
+
+        heading('KOPF')
+        for key, text in spec.HEADER_FIELDS:
+            row(key, text, wx.TextCtrl(page, value=values.get(key, '')))
+
+        for title, fields in spec.SECTIONS:
+            heading(title)
+            for key, text, choices, _ in fields:
+                if choices is spec.AUTO:
+                    control = wx.TextCtrl(page, value=values.get(key, ''), style=wx.TE_READONLY)
+                    control.SetToolTip('Read from the board')
+                    control.SetBackgroundColour(wx.Colour(235, 235, 235))
+                else:
+                    control = wx.ComboBox(page, value=values.get(key, ''), choices=choices, style=wx.CB_DROPDOWN)
+                row(key, text, control)
+
+        heading('BEMERKUNGEN')
+        remarks = wx.TextCtrl(page, value=values.get('bemerkungen', ''), style=wx.TE_MULTILINE, size=wx.Size(-1, 80))
+        controls['bemerkungen'] = remarks
+
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(grid, 0, wx.ALL | wx.EXPAND, 10)
+        sizer.Add(remarks, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 10)
+        page.SetSizer(sizer)
+        return controls
 
     # Close the dialog when pressing the ESC key
     def onKey(self, event):
@@ -148,7 +206,10 @@ class KiCadToJLCForm(wx.Frame):
         options[SET_REVISION_OPT] = self.mSetRevisionCheckbox.GetValue()
         options[STEP_EXPORT_OPT] = self.mStepExportCheckbox.GetValue()
         options[SCHEMATIC_PDF_OPT] = self.mSchematicPdfCheckbox.GetValue()
+        options[PCB_SPEC_OPT] = self.mPcbSpecCheckbox.GetValue()
         options[PROJECT_BACKUP_OPT] = self.mProjectBackupCheckbox.GetValue()
+        options[PCB_SPEC_VALUES] = {key: control.GetValue().strip() if key != 'bemerkungen' else control.GetValue()
+                                    for key, control in self.mSpecControls.items()}
         options[ARCHIVE_NAME] = self.mArchiveNameControl.GetValue()
         options[EXTRA_LAYERS] = self.mAdditionalLayersControl.GetValue()
         options[ALL_ACTIVE_LAYERS_OPT] = self.mAllActiveLayersCheckbox.GetValue()
@@ -165,7 +226,14 @@ class KiCadToJLCForm(wx.Frame):
         has_index = bool(normalize_name(options[INDEX_OPT]))
         if has_drawing_no != has_index:
             wx.MessageBox("For a release please enter both drawing number and index.", "Schienle_PCB_Freigabe", wx.OK | wx.ICON_WARNING)
+            self.mNotebook.SetSelection(0)
             (self.mIndexControl if has_drawing_no else self.mDrawingNoControl).SetFocus()
+            return
+
+        if has_drawing_no and options[PCB_SPEC_OPT] and not options[PCB_SPEC_VALUES].get('freigegeben_von'):
+            wx.MessageBox("Please fill in 'Freigegeben von' in the PCB specification.", "Schienle_PCB_Freigabe", wx.OK | wx.ICON_WARNING)
+            self.mNotebook.SetSelection(1)
+            self.mSpecControls['freigegeben_von'].SetFocus()
             return
 
         options[OVERWRITE_RELEASE_OPT] = False
@@ -180,17 +248,7 @@ class KiCadToJLCForm(wx.Frame):
 
         save_user_options({k: v for k, v in options.items() if k != OVERWRITE_RELEASE_OPT})
 
-        for control in self.mReleaseControls:
-            control.Hide()
-        self.mArchiveNameControl.Hide()
-        self.mAdditionalLayersControl.Hide()
-        self.mAllActiveLayersCheckbox.Hide()
-        self.mExtendEdgeCutsCheckbox.Hide()
-        self.mAlternativeEdgeCutsCheckbox.Hide()
-        self.mAutomaticTranslationCheckbox.Hide()
-        self.mAutomaticFillCheckbox.Hide()
-        self.mExcludeDnpCheckbox.Hide()
-        self.mOpenBrowserCheckbox.Hide()
+        self.mNotebook.Hide()
         self.mGenerateButton.Hide()
         self.mGaugeStatus.Show()
         self.mStatusText.Show()
