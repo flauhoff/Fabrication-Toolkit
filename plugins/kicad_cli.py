@@ -83,6 +83,7 @@ def export_step(board_file, output_file, timeout=600, logger=None):
            '--include-tracks',     # tracks and vias
            '--include-pads',
            '--include-zones',
+           '--drill-origin',       # origin = drill/place file origin of the board (instead of the board center)
            '--output', output_file,
            board_file]
 
