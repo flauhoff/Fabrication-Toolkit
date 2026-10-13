@@ -1,6 +1,5 @@
 import os
 import wx
-import pcbnew  # type: ignore
 import shutil
 import tempfile
 import webbrowser
@@ -27,30 +26,20 @@ TITLE = 'Schienle_PCB_Freigabe'
 
 
 class ProcessThread(Thread):
-    def __init__(self, wx, options, cli = None, openBrowser = True, nonInteractive = False):
+    def __init__(self, wx, board, options, openBrowser = True, nonInteractive = False):
+        '''
+        wx: the dialog (graphical mode) or None (command line mode)
+        board: kicad_board.BoardAccess of the board opened in KiCad
+        '''
         Thread.__init__(self)
 
-        # prevent use of cli and graphical mode at the same time
-        if (wx is None and cli is None) or (wx is not None and cli is not None):
-            logging.error("Specify either graphical or cli use!")
-            return
-
-        if cli is not None:
-            try:
-                self.board = pcbnew.LoadBoard(cli)
-            except Exception as e:
-                logging.error("%s - Fehler: %s", TITLE, e)
-                return
-        else:
-            self.board = None
-
-        self.process_manager = ProcessManager(self.board)
+        self.board = board
         self.wx = wx
-        self.cli = cli
         self.options = options
         self.openBrowser = openBrowser
         self.nonInteractive = nonInteractive
-        self.log = get_logger(os.path.dirname(self.process_manager.board.GetFileName()))
+        self.log = get_logger(board.project_directory)
+        self.process_manager = ProcessManager(board, logger=self.log)
         self._step_started = None
         self.start()
 
@@ -81,8 +70,8 @@ class ProcessThread(Thread):
 
     def run(self):
         self.log.info('=' * 70)
-        log_environment(self.log)
-        self.log.info('Board: %s', self.process_manager.board.GetFileName())
+        log_environment(self.log, self.board.kicad)
+        self.log.info('Board: %s', self.board.file_path)
         self.log.info('Optionen: %s', self.options)
         try:
             self._run()
@@ -100,7 +89,7 @@ class ProcessThread(Thread):
         temp_dir_gerber = temp_dir + "_g"
         os.makedirs(temp_dir_gerber)
 
-        board_file = self.process_manager.board.GetFileName()
+        board_file = self.board.file_path
         project_directory = os.path.dirname(board_file)
         drawing_number = normalize_name(self.options.get(DRAWING_NO_OPT))
         index = normalize_name(self.options.get(INDEX_OPT))
@@ -118,8 +107,8 @@ class ProcessThread(Thread):
                     self.process_manager.update_zone_fills()
                 self.step(6, 'Platine speichern')
                 if self.options.get(SET_REVISION_OPT):
-                    set_revision(self.process_manager.board, self.options[INDEX_OPT].strip())
-                save_board(self.process_manager.board)
+                    set_revision(self.board, self.options[INDEX_OPT].strip())
+                save_board(self.board)
 
             # no release with DRC errors
             self.step(8, 'DRC läuft (kicad-cli)')

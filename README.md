@@ -2,7 +2,7 @@
 
 # Schienle_PCB_Freigabe
 
-KiCad-Plugin (KiCad 9/10) für die Leiterplatten-Freigabe: Zeichnungsnummer und Index eingeben, DRC prüfen, Fertigungsdaten, STEP, Schaltplan-PDF und Leiterplattenspezifikation erstellen und das Projekt zum Freigabezeitpunkt sichern.
+KiCad-Plugin (KiCad 10/11, IPC-API) für die Leiterplatten-Freigabe: Zeichnungsnummer und Index eingeben, DRC prüfen, Fertigungsdaten, STEP, Schaltplan-PDF und Leiterplattenspezifikation erstellen und das Projekt zum Freigabezeitpunkt sichern.
 
 Autor: Schienle. Basiert auf dem [Fabrication Toolkit](https://github.com/bennymeg/Fabrication-Toolkit) von Benny Megidish (Apache-2.0).
 
@@ -10,7 +10,13 @@ Autor: Schienle. Basiert auf dem [Fabrication Toolkit](https://github.com/bennym
 
 KiCad → **Plugin and Content Manager** → **Install from File…** → ZIP auswählen. Danach erscheint das Schienle-Icon in der Werkzeugleiste des PCB-Editors.
 
-Voraussetzung: KiCad 9 oder 10 (DRC, STEP, Schaltplan-PDF und Platinenansichten werden mit `kicad-cli` erzeugt).
+Voraussetzungen:
+
+- KiCad 10 oder 11. Das Plugin nutzt die IPC-API von KiCad (`kicad-python`); die alte SWIG-Schnittstelle (`pcbnew`) gibt es ab KiCad 11 nicht mehr. Für KiCad 9 bleibt Version 1.5.x.
+- Die API muss eingeschaltet sein: **Einstellungen → Plugins → KiCad API aktivieren**.
+- Beim ersten Start legt KiCad eine eigene Python-Umgebung an und installiert `kicad-python` und `wxPython` aus `requirements.txt`. Das kann einen Moment dauern.
+- Gerber-, Bohr- und Netzlistendaten, DRC, STEP, Schaltplan-PDF und Platinenansichten werden mit `kicad-cli` aus der gespeicherten Platine erzeugt.
+- Den Index in das Platinen-Schriftfeld schreiben (**Index in Revision schreiben**) geht erst ab KiCad 10.0.1.
 
 ## Ablauf einer Freigabe
 
@@ -220,7 +226,7 @@ _The fields will be queried in the order denoted above._
 
 ## Kommandozeile
 
-Die Freigabe (ohne Leiterplattenspezifikation) lässt sich auch ohne Oberfläche erstellen, z. B. für Automatisierung:
+Die Freigabe (ohne Leiterplattenspezifikation) lässt sich auch ohne Dialog erstellen, z. B. für Automatisierung. KiCad muss dafür laufen, die Platine im PCB-Editor geöffnet und die API eingeschaltet sein; außerdem muss `kicad-python` installiert sein (`pip install kicad-python`).
 
 ```
 python3 -m plugins.cli -p /meinProjekt/meinePlatine.kicad_pcb -dn 4711-02 -i B -sR -f -st -sp -pB -nI
@@ -251,8 +257,7 @@ usage: Schienle_PCB_Freigabe [-h] --path PATH --drawingNumber NUMMER --index IND
                         Erweiterte Optionen wie im Dialog
 ```
 
-Unter Windows in der `KiCad Command Prompt` mit `python` statt `python3` ausführen. Für das installierte Plugin `plugins.cli` durch den Paketnamen ersetzen, z. B.
-`python -m "${KICAD10_3RD_PARTY}plugins/com_schienle_Schienle-PCB-Freigabe.cli" -p "${KIPRJMOD}/${PROJECTNAME}.kicad_pcb" -dn 4711-02 -i B`
+Unter Windows in der `KiCad Command Prompt` mit `python` statt `python3` ausführen.
 
 ## Autor
 

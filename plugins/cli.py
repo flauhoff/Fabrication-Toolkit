@@ -1,13 +1,18 @@
+import os
+import sys
 import argparse as ap
 
 from .thread import ProcessThread
 from .options import *
+from .kicad_board import BoardAccess
+from .kicad_cli import set_kicad_cli_path
 
 
 if __name__ == '__main__':
     parser = ap.ArgumentParser(prog="Schienle_PCB_Freigabe",
                                description="Erstellt eine PCB-Freigabe (DRC, Fertigungsdaten, STEP, Schaltplan-PDF, "
-                                           "Projekt-Backup) in Freigaben/<Zeichnungsnummer>_<Index>/")
+                                           "Projekt-Backup) in Freigaben/<Zeichnungsnummer>_<Index>/. "
+                                           "Die Platine muss in einem laufenden KiCad geöffnet sein (KiCad-API).")
 
     parser.add_argument("--path",               "-p",  type=str, help="Pfad zur KiCad-Platine (.kicad_pcb)", required=True)
     parser.add_argument("--drawingNumber",      "-dn", type=str, help="Zeichnungsnummer der Freigabe", metavar="NUMMER", required=True)
@@ -45,4 +50,13 @@ if __name__ == '__main__':
     options[AUTO_TRANSLATE_OPT] = args.autoTranslate
     options[EXCLUDE_DNP_OPT] = args.excludeDNP
 
-    ProcessThread(wx=None, cli=args.path, options=options, openBrowser=args.openBrowser, nonInteractive=args.nonInteractive)
+    # the board data comes from the running KiCad via the IPC API, the board has to be opened there
+    try:
+        board = BoardAccess.open()
+    except Exception as e:
+        sys.exit("Keine Verbindung zu KiCad bzw. keine Platine geöffnet: {}".format(e))
+    if os.path.normcase(os.path.abspath(board.file_path)) != os.path.normcase(os.path.abspath(args.path)):
+        sys.exit("In KiCad ist '{}' geöffnet, nicht '{}'.".format(board.file_path, args.path))
+    set_kicad_cli_path(board.kicad_cli_path())
+
+    ProcessThread(None, board, options, openBrowser=args.openBrowser, nonInteractive=args.nonInteractive)

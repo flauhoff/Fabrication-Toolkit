@@ -1,77 +1,14 @@
-import pcbnew  # type: ignore
 import os
 import json
 from .config import optionsFileName
 import wx
 
-def get_version():
-    return float('.'.join(pcbnew.GetBuildVersion().split(".")[0:2]))  # e.g GetBuildVersion(): e.g. '7.99.0-3969-gc5ac2337e4'
+def get_user_options_file_path(board):
+    return os.path.join(board.project_directory, optionsFileName)
 
-def is_v10(version = get_version()):
-    return version >= 9.99 and version < 10.99
-
-def is_v9(version = get_version()):
-    return version >= 8.99 and version < 9.99
-
-def is_v8(version = get_version()):
-    return version >= 7.99 and version < 8.99
-
-def is_v7(version = get_version()):
-    return version >= 6.99 and version < 7.99
-
-def is_v6(version = get_version()):
-    return version >= 5.99 and version < 6.99
-
-def duplicate_footprint(footprint):
-    version = get_version()
-
-    if is_v10(version):
-        duplicate = footprint.Duplicate(False)
-    else:
-        duplicate = footprint.Duplicate()
-
-    # KiCad 10 SWIG returns the base BOARD_ITEM and removed the
-    # pcbnew.Cast_to_FOOTPRINT helper; downcast via the object's own
-    # .Cast() method instead. Older KiCads still ship Cast_to_FOOTPRINT.
-    if hasattr(pcbnew, 'Cast_to_FOOTPRINT'):
-        return pcbnew.Cast_to_FOOTPRINT(duplicate)
-    if hasattr(duplicate, 'Cast'):
-        return duplicate.Cast()
-    return duplicate
-
-def footprint_to_degrees(footprint):
-    if hasattr(footprint, 'SetOrientationDegrees'):
-        footprint.SetOrientationDegrees(0)
-    else:
-        footprint.SetOrientation(pcbnew.EDA_ANGLE(0, pcbnew.DEGREES_T))
-                 
-def footprint_has_field(footprint, field_name):
-    version = get_version()
-    
-    if is_v10(version):
-        return footprint.HasField(field_name)
-    elif is_v8(version) or is_v9(version):
-        return footprint.HasFieldByName(field_name)
-    else:
-        return footprint.HasProperty(field_name)
-
-def footprint_get_field(footprint, field_name):
-    version = get_version()
-    
-    if is_v10(version):
-        return footprint.GetField(field_name).GetText()
-    elif is_v8(version) or is_v9(version):
-        return footprint.GetFieldByName(field_name).GetText()
-    else:
-        return footprint.GetProperty(field_name)
-
-def get_user_options_file_path():
-    boardFilePath = pcbnew.GetBoard().GetFileName()
-    return os.path.join(os.path.dirname(boardFilePath), optionsFileName)
-
-def load_user_options(default_options):
+def load_user_options(board, default_options):
     try:
-        with open(get_user_options_file_path(), 'r') as f:
+        with open(get_user_options_file_path(board), 'r') as f:
             user_options = json.load(f)
     except:
         user_options = default_options
@@ -81,32 +18,16 @@ def load_user_options(default_options):
     options.update(user_options)
     return options
 
-def save_user_options(options):
+def save_user_options(board, options):
     try:
-        with open(get_user_options_file_path(), 'w') as f:
+        with open(get_user_options_file_path(board), 'w') as f:
             json.dump(options, f)
     except:
         wx.MessageBox("Error saving user options", "Error", wx.OK | wx.ICON_ERROR)
 
-def get_plot_plan(board, active_only=True):
-    """Returns `(KiCad standard name, layer id, custom user name)` of all (active) layers of the given board."""
-    layers = []
-    i = pcbnew.PCBNEW_LAYER_ID_START - 1
-    while i < pcbnew.PCBNEW_LAYER_ID_START + pcbnew.PCB_LAYER_ID_COUNT - 1:
-        i += 1
-        if active_only and not board.IsLayerEnabled(i):
-            continue
-
-        layer_std_name = pcbnew.BOARD.GetStandardLayerName(i)
-        layer_name = pcbnew.BOARD.GetLayerName(board, i)
-
-        layers.append((layer_std_name, i, layer_name))
-    return layers
-
-def get_layer_names(board, active_only=True):
-    """Returns a list of (active) layer names of the current board"""
-    plotPlan = get_plot_plan(board, active_only)
-    return [layer_info[2] for layer_info in plotPlan]
+def get_layer_names(board):
+    """Returns a list of the enabled layer names of the current board"""
+    return board.layer_names()
 
 def print_cli_progress_bar(percent, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
@@ -130,29 +51,24 @@ def print_cli_progress_bar(percent, prefix = '', suffix = '', decimals = 1, leng
     if percent == 100: 
         print()
 def save_board(board):
-    """Saves the board to its own file (used after changing the title block)"""
-    if hasattr(pcbnew, 'SaveBoard'):
-        pcbnew.SaveBoard(board.GetFileName(), board)
-    else:
-        board.Save(board.GetFileName())
+    """Saves the board in KiCad (kicad-cli works on the saved file)"""
+    board.save()
 
 def set_revision(board, index):
     """Writes the index into the board title block revision, unless the revision refers to a
     text variable (e.g. ${INDEX}) - then the project variable is the source and is kept."""
-    title_block = board.GetTitleBlock()
-    if '${' in title_block.GetRevision():
+    if '${' in board.title_block().revision:
         return False
-    title_block.SetRevision(index)
+    try:
+        board.set_revision(index)
+    except Exception as e:
+        raise RuntimeError('Der Index konnte nicht in das Schriftfeld geschrieben werden (dafür ist KiCad 10.0.1 '
+                           'oder neuer nötig). Option abwählen oder KiCad aktualisieren.\n{}'.format(e))
     return True
 
 def get_project_variable(board, name):
     """Value of a project text variable (Board/Schematic Setup -> Text Variables), None if not defined."""
-    if not (hasattr(board, 'GetProject') and hasattr(pcbnew, 'ExpandTextVars')):
-        return None
-    try:
-        reference = '${%s}' % name
-        value = pcbnew.ExpandTextVars(reference, board.GetProject())
-    except Exception:
-        return None
+    reference = '${%s}' % name
+    value = board.expand_text_variables(reference)
     # KiCad leaves unknown variables unexpanded
     return None if value == reference else value
