@@ -197,20 +197,33 @@ def write_spec_pdf(path, header, sections, remarks, logo=None, views=None):
 
     _page_head(c, header, logo, left, right)
 
-    # header block with index box
-    top, height, split = 120, 96, 436
-    c.rect(left, top, split - left, height, CELL)
-    c.rect(split, top, right - split, height, DARK)
-    c.text((split + right) / 2, top + 30, 'INDEX', 'regular', 8.5, WHITE, 'center')
-    c.text((split + right) / 2, top + 66, header.get('index', ''), 'bold', 26, WHITE, 'center')
+    # header block with index box; long values (e.g. company) wrap to max. 2 lines per field
+    top, split = 120, 436
+    columns = ((left + 11, 255 - (left + 11) - 10), (255, split - 255 - 10))
     fields = [('PROJEKT', 'projekt', 'FREIGABEDATUM', 'freigabedatum'),
               ('LEITERPLATTE', 'leiterplatte', 'FREIGEGEBEN VON', 'freigegeben_von'),
               ('FIRMA', 'firma', 'ZEICHNUNGSNUMMER', 'zeichnungsnummer')]
-    for row, (l1, k1, l2, k2) in enumerate(fields):
-        y = top + 20 + row * 27
-        for x, label, key in ((left + 11, l1, k1), (255, l2, k2)):
+    layout, y = [], top + 20
+    for l1, k1, l2, k2 in fields:
+        cells = []
+        for (x, width), label, key in zip(columns, (l1, l2), (k1, k2)):
+            lines = wrap_text(header.get(key, ''), width, 'bold', 10)
+            if len(lines) > 2:
+                lines = lines[:1] + [lines[1] + ' ...']
+            cells.append((x, label, lines))
+        layout.append((y, cells))
+        y += 17 + 11 * max(len(lines) for _, _, lines in cells)
+    height = max(96, y - top - 3)
+
+    c.rect(left, top, split - left, height, CELL)
+    c.rect(split, top, right - split, height, DARK)
+    c.text((split + right) / 2, top + height / 2 - 18, 'INDEX', 'regular', 8.5, WHITE, 'center')
+    c.text((split + right) / 2, top + height / 2 + 18, header.get('index', ''), 'bold', 26, WHITE, 'center')
+    for y, cells in layout:
+        for x, label, lines in cells:
             c.text(x, y, label, 'regular', 6.5, LIGHT_GREY)
-            c.text(x, y + 10, header.get(key, ''), 'bold', 10, BLACK)
+            for i, line in enumerate(lines):
+                c.text(x, y + 10 + 11 * i, line, 'bold', 10, BLACK)
 
     # tables
     y = top + height + 22

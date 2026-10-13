@@ -27,7 +27,7 @@ SECTIONS = [
                                          'abgedeckt (tented)',
                                          'verschlossen (plugged, IPC-4761 Typ III)',
                                          'gefüllt (IPC-4761 Typ VI)',
-                                         'gefüllt und abgedeckelt (IPC-4761 Typ VII)'], 'abgedeckt (tented)'),
+                                         'gefüllt und abgedeckelt (IPC-4761 Typ VII)'], 'keine (offen)'),
     ]),
     ('MECHANISCHE BEARBEITUNG', [
         ('kontur', 'Konturbearbeitung', ['gefräst', 'geritzt (V-Cut, gebrochen)', 'gefräst und geritzt'], 'gefräst'),

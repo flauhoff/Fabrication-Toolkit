@@ -205,7 +205,12 @@ class ReleaseForm(wx.Frame):
 
         heading('KOPF')
         for key, text in spec.HEADER_FIELDS:
-            row(key, text, wx.TextCtrl(page, value=values.get(key, '')))
+            if key == 'firma':
+                # two lines in the PDF header; Enter sets the line break
+                control = wx.TextCtrl(page, value=values.get(key, ''), style=wx.TE_MULTILINE, size=wx.Size(-1, 48))
+            else:
+                control = wx.TextCtrl(page, value=values.get(key, ''))
+            row(key, text, control)
 
         for title, fields in spec.SECTIONS:
             heading(title)
