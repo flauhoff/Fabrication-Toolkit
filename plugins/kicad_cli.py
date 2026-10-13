@@ -80,6 +80,9 @@ def export_step(board_file, output_file, timeout=600, logger=None):
     '''Exports the 3D model of the (saved) board file as STEP using kicad-cli.'''
     cmd = [find_kicad_cli(), 'pcb', 'export', 'step',
            '--subst-models',
+           '--include-tracks',     # tracks and vias
+           '--include-pads',
+           '--include-zones',
            '--output', output_file,
            board_file]
 

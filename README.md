@@ -57,7 +57,7 @@ Ohne Projektvariable wird der Index im Dialog eingegeben. Vor der Freigabe prüf
 
 ☑ __Index in die Revision des Platinen-Schriftfelds schreiben__ (außer die Revision verweist auf eine Textvariable)</br>
 ☑ __Alle Zonen vor der Freigabe füllen__</br>
-☑ __3D-Modell exportieren (STEP)__</br>
+☑ __3D-Modell exportieren (STEP)__: Platine mit Bauteilmodellen sowie Leiterbahnen, Vias, Pads und Zonen der Außenlagen.</br>
 ☑ __Schaltplan als PDF exportieren__: alle Blätter von `<Projekt>.kicad_sch`; `${ZEICHNUNGSNUMMER}` und `${INDEX}` stehen im Schaltplan zur Verfügung.</br>
 ☑ __Leiterplattenspezifikation erstellen (PDF)__, optional __mit Ansicht Ober- und Unterseite__ (3D-Rendering mit Bauteilmodellen)</br>
 ☑ __Projekt-Backup erstellen__: Schaltplan, Platine, Bibliotheken, 3D-Modelle usw.; `Freigaben/`, Backups, Lock-Dateien, `fp-info-cache` und VCS-Ordner werden ausgelassen.</br>
