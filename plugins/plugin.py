@@ -1,6 +1,5 @@
 import os
 import wx
-import pcbnew  # type: ignore
 
 from .thread import ProcessThread, TITLE
 from .events import StatusEvent
@@ -11,6 +10,8 @@ from .projectinfo import read_stackup, read_schematic_revision
 from .utils import load_user_options, save_user_options, get_layer_names, save_board, set_revision, get_project_variable
 from .debuglog import get_logger
 from .process import ProcessManager
+from .kicad_board import BoardAccess
+from .kicad_cli import set_kicad_cli_path
 
 READ_ONLY_COLOUR = wx.Colour(235, 235, 235)
 HINT_COLOUR = wx.Colour(90, 90, 90)
@@ -25,7 +26,7 @@ def _read_only(control, tooltip):
 
 # Release dialog
 class ReleaseForm(wx.Frame):
-    def __init__(self):
+    def __init__(self, board):
         wx.Frame.__init__(
             self,
             None,
@@ -40,8 +41,8 @@ class ReleaseForm(wx.Frame):
         self.SetBackgroundColour(wx.LIGHT_GREY)
         self.SetSizeHints(wx.Size(600, 100), wx.DefaultSize)
 
-        board = pcbnew.GetBoard()
-        userOptions = load_user_options({
+        self.board = board
+        userOptions = load_user_options(board, {
             DRAWING_NO_OPT: "",
             INDEX_OPT: "",
             SET_REVISION_OPT: True,
@@ -105,7 +106,7 @@ class ReleaseForm(wx.Frame):
         grid = wx.FlexGridSizer(cols=2, vgap=6, hgap=10)
         grid.AddGrowableCol(1)
         self.mDrawingNoControl = wx.TextCtrl(page, value=userOptions[DRAWING_NO_OPT])
-        self.mIndexControl = wx.TextCtrl(page, value=index_var or userOptions[INDEX_OPT] or board.GetTitleBlock().GetRevision())
+        self.mIndexControl = wx.TextCtrl(page, value=index_var or userOptions[INDEX_OPT] or board.title_block().revision)
         self.mIndexControl.SetHint('z. B. A, B, 01')
         if index_var is not None:
             _read_only(self.mIndexControl, 'Aus der Projekt-Textvariable INDEX (Datei → Board Setup → Text Variables)')
@@ -178,7 +179,7 @@ class ReleaseForm(wx.Frame):
         self.mNotebook.AddPage(page, 'Leiterplattenspezifikation')
 
         try:
-            stackup = read_stackup(board.GetFileName())
+            stackup = read_stackup(board.file_path)
         except Exception:
             stackup = {}
 
@@ -256,7 +257,7 @@ class ReleaseForm(wx.Frame):
             event.Skip()
 
     def onGenerateButtonClick(self, event):
-        board = pcbnew.GetBoard()
+        board = self.board
 
         options = dict()
         options[DRAWING_NO_OPT] = self.mDrawingNoControl.GetValue().strip()
@@ -291,7 +292,7 @@ class ReleaseForm(wx.Frame):
             return
 
         # the schematic title block should show the same index (checked on the saved schematic)
-        schematic_revision = read_schematic_revision(os.path.splitext(board.GetFileName())[0] + '.kicad_sch')
+        schematic_revision = read_schematic_revision(os.path.splitext(board.file_path)[0] + '.kicad_sch')
         if schematic_revision is not None and schematic_revision != options[INDEX_OPT] and '${INDEX}' not in schematic_revision:
             answer = wx.MessageBox("Die Revision im Schaltplan-Schriftfeld ist '{}', der Index der Freigabe ist '{}'.\n\n"
                                    "Tipp: Im Schaltplan-Schriftfeld ${{INDEX}} als Revision eintragen (mit der "
@@ -302,7 +303,7 @@ class ReleaseForm(wx.Frame):
                 return
 
         options[OVERWRITE_RELEASE_OPT] = False
-        release_path = get_release_path(board.GetFileName(), options[DRAWING_NO_OPT], options[INDEX_OPT])
+        release_path = get_release_path(board.file_path, options[DRAWING_NO_OPT], options[INDEX_OPT])
         if os.path.exists(release_path):
             answer = wx.MessageBox("Die Freigabe '{}' existiert bereits:\n{}\n\nÜberschreiben?".format(
                                        get_release_name(options[DRAWING_NO_OPT], options[INDEX_OPT]), release_path),
@@ -311,7 +312,7 @@ class ReleaseForm(wx.Frame):
                 return
             options[OVERWRITE_RELEASE_OPT] = True
 
-        save_user_options({k: v for k, v in options.items() if k != OVERWRITE_RELEASE_OPT})
+        save_user_options(board, {k: v for k, v in options.items() if k != OVERWRITE_RELEASE_OPT})
 
         self.mNotebook.Hide()
         self.mGenerateButton.Hide()
@@ -320,12 +321,12 @@ class ReleaseForm(wx.Frame):
 
         # DRC, STEP, PDFs and images are created by kicad-cli from the saved files, so fill the zones,
         # write the index and save the board first. Board changes must happen in the GUI thread.
-        log = get_logger(os.path.dirname(board.GetFileName()))
+        log = get_logger(board.project_directory)
         try:
             if options[AUTO_FILL_OPT]:
                 self.setStatusText('Zonen füllen')
                 log.info('Zonen füllen')
-                ProcessManager(board).update_zone_fills()
+                ProcessManager(board, logger=log).update_zone_fills()
             if options[SET_REVISION_OPT]:
                 if set_revision(board, options[INDEX_OPT]):
                     log.info('Index %s in das Schriftfeld geschrieben', options[INDEX_OPT])
@@ -343,7 +344,7 @@ class ReleaseForm(wx.Frame):
         self.SetTitle(TITLE + ' (läuft ...)')
 
         StatusEvent.invoke(self, self.updateDisplay)
-        ProcessThread(self, options, openBrowser=options[OPEN_BROWSER_OPT])
+        ProcessThread(self, board, options, openBrowser=options[OPEN_BROWSER_OPT])
 
     def setStatusText(self, text):
         self.mStatusText.SetLabel(text)
@@ -352,22 +353,22 @@ class ReleaseForm(wx.Frame):
     def updateDisplay(self, status):
         if status.data == -1:
             self.SetTitle(TITLE + ' (fertig)')
-            pcbnew.Refresh()
             self.Destroy()
         else:
             self.mGaugeStatus.SetValue(int(status.data))
 
 
-# Plugin definition
-class Plugin(pcbnew.ActionPlugin):
-    def __init__(self):
-        self.name = "Schienle_PCB_Freigabe"
-        self.category = "Manufacturing"
-        self.description = "PCB-Freigabe: DRC, Fertigungsdaten, Schaltplan, Leiterplattenspezifikation und Backup mit Zeichnungsnummer und Index"
-        self.pcbnew_icon_support = hasattr(self, "show_toolbar_button")
-        self.show_toolbar_button = True
-        self.icon_file_name = os.path.join(os.path.dirname(__file__), 'icon.png')
-        self.dark_icon_file_name = os.path.join(os.path.dirname(__file__), 'icon_dark.png')
-
-    def Run(self):
-        ReleaseForm().Show()
+def run():
+    '''Entry point of the toolbar button (see plugin.json / main.py): runs the release dialog as own wx application,
+    connected to the board opened in KiCad via the IPC API.'''
+    app = wx.App(False)
+    try:
+        board = BoardAccess.open()
+        set_kicad_cli_path(board.kicad_cli_path())
+    except Exception as e:
+        wx.MessageBox('Keine Verbindung zu KiCad bzw. keine Platine geöffnet:\n{}\n\n'
+                      'Die KiCad-API muss aktiviert sein (Einstellungen → Plugins → KiCad API aktivieren).'.format(e),
+                      TITLE, wx.OK | wx.ICON_ERROR)
+        return
+    ReleaseForm(board).Show()
+    app.MainLoop()

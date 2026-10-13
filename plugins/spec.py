@@ -65,29 +65,27 @@ def build_sections(values):
 
 def board_values(board):
     '''Values read from the board: layer count, outline size, thickness, project title, company.'''
-    import pcbnew  # type: ignore
     values = {}
 
     try:
-        values['lagenanzahl'] = str(board.GetCopperLayerCount())
+        values['lagenanzahl'] = str(board.copper_layer_count())
     except Exception:
         pass
     try:
-        bbox = board.GetBoardEdgesBoundingBox()
-        values['abmessungen'] = '{} x {}'.format(format_mm(pcbnew.ToMM(bbox.GetWidth())), format_mm(pcbnew.ToMM(bbox.GetHeight())))
+        size = board.board_edges_size()
+        if size:
+            values['abmessungen'] = '{} x {}'.format(format_mm(size[0] / 1e6), format_mm(size[1] / 1e6))
     except Exception:
         pass
     try:
-        values['dicke'] = format_mm(pcbnew.ToMM(board.GetDesignSettings().GetBoardThickness()))
+        values['dicke'] = format_mm(board.board_thickness() / 1e6)
     except Exception:
         pass
 
-    title_block = board.GetTitleBlock()
-    title, company = title_block.GetTitle(), title_block.GetCompany()
-    if hasattr(board, 'GetProject') and hasattr(pcbnew, 'ExpandTextVars'):
-        title = pcbnew.ExpandTextVars(title, board.GetProject())
-        company = pcbnew.ExpandTextVars(company, board.GetProject())
-    values['projekt'] = title or os.path.splitext(os.path.basename(board.GetFileName()))[0]
+    title_block = board.title_block()
+    title = board.expand_text_variables(title_block.title)
+    company = board.expand_text_variables(title_block.company)
+    values['projekt'] = title or os.path.splitext(os.path.basename(board.file_path))[0]
     if company:
         values['firma'] = company
 

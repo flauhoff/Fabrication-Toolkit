@@ -2,16 +2,18 @@ import os
 import sys
 import shutil
 import subprocess
+import tempfile
 
 stepFileName = 'board.step'
 
 
-def _pcbnew_location():
-    try:
-        import pcbnew  # type: ignore
-        return pcbnew.__file__
-    except Exception:
-        return None
+# kicad-cli of the running KiCad, as reported by the IPC API (see set_kicad_cli_path)
+_kicad_cli_path = None
+
+
+def set_kicad_cli_path(path):
+    global _kicad_cli_path
+    _kicad_cli_path = path
 
 
 def _macos_bundle_candidates(paths):
@@ -32,26 +34,27 @@ def find_kicad_cli():
     '''Locates the kicad-cli executable of the running KiCad installation (KiCad 7+).'''
     exe = 'kicad-cli.exe' if sys.platform == 'win32' else 'kicad-cli'
     candidates = [
+        _kicad_cli_path,
         # Windows: KiCad's bundled python.exe lives next to kicad-cli.exe in KiCad\<ver>\bin
         os.path.join(os.path.dirname(sys.executable), exe),
     ]
 
-    # macOS: python and pcbnew run from inside the KiCad.app bundle, wherever it is installed
-    candidates += _macos_bundle_candidates([sys.executable, _pcbnew_location()])
+    # macOS: python runs from inside the KiCad.app bundle, wherever it is installed
+    candidates += _macos_bundle_candidates([sys.executable])
     candidates += [
         '/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli',
         os.path.expanduser('~/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli'),
     ]
 
     for candidate in candidates:
-        if os.path.isfile(candidate):
+        if candidate and os.path.isfile(candidate):
             return candidate
 
     found = shutil.which(exe)
     if found:
         return found
 
-    raise FileNotFoundError('kicad-cli was not found. STEP / schematic PDF export requires KiCad 7 or newer.')
+    raise FileNotFoundError('kicad-cli was not found.')
 
 
 def _run(cmd, timeout, logger):
@@ -155,3 +158,77 @@ def render_board(board_file, output_file, side='top', width=1600, height=1200, t
         raise RuntimeError('Rendering the {} view failed (exit code {}). Board images require KiCad 9 or newer.\n{}'.format(side, returncode, output[-2000:]))
 
     return output_file
+
+
+def _check(returncode, output, output_path, what):
+    if returncode != 0 or not os.path.exists(output_path):
+        raise RuntimeError('{} failed (exit code {}):\n{}'.format(what, returncode, output[-2000:]))
+
+
+def export_gerbers(board_file, output_dir, layers, timeout=600, logger=None):
+    '''Plots one gerber file per layer (KiCad standard layer names, e.g. F.Cu) into output_dir.'''
+    cmd = [find_kicad_cli(), 'pcb', 'export', 'gerbers',
+           '--layers', ','.join(layers),
+           '--no-x2',
+           '--subtract-soldermask',
+           '--use-drill-file-origin',
+           '--output', output_dir,
+           board_file]
+
+    returncode, output = _run(cmd, timeout, logger)
+    _check(returncode, output, output_dir, 'Gerber export')
+
+    # the gerber job file is not part of the fabrication data
+    for name in os.listdir(output_dir):
+        if name.endswith('.gbrjob'):
+            os.remove(os.path.join(output_dir, name))
+
+
+def export_gerber(board_file, output_file, layers, timeout=600, logger=None):
+    '''Plots the given layers together into one gerber file (e.g. Edge.Cuts with the V-cut layer).'''
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cmd = [find_kicad_cli(), 'pcb', 'export', 'gerbers',
+               '--layers', layers[0],
+               '--no-x2',
+               '--subtract-soldermask',
+               '--use-drill-file-origin',
+               '--output', temp_dir,
+               board_file]
+        if len(layers) > 1:
+            cmd[-1:-1] = ['--common-layers', ','.join(layers[1:])]
+
+        returncode, output = _run(cmd, timeout, logger)
+        plots = [name for name in os.listdir(temp_dir) if not name.endswith('.gbrjob')]
+        if returncode != 0 or len(plots) != 1:
+            raise RuntimeError('Gerber export failed (exit code {}):\n{}'.format(returncode, output[-2000:]))
+        shutil.move(os.path.join(temp_dir, plots[0]), output_file)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def export_drill(board_file, output_dir, timeout=600, logger=None):
+    '''Excellon drill files (separate PTH / NPTH, mm, drill/place file origin) with gerber drill maps.'''
+    cmd = [find_kicad_cli(), 'pcb', 'export', 'drill',
+           '--format', 'excellon',
+           '--excellon-units', 'mm',
+           '--drill-origin', 'plot',
+           '--excellon-separate-th',
+           '--excellon-oval-format', 'route',
+           '--generate-map',
+           '--map-format', 'gerberx2',
+           '--output', output_dir if output_dir.endswith(os.sep) else output_dir + os.sep,
+           board_file]
+
+    returncode, output = _run(cmd, timeout, logger)
+    _check(returncode, output, output_dir, 'Drill export')
+
+
+def export_ipcd356(board_file, output_file, timeout=600, logger=None):
+    '''IPC-D-356 netlist (KiCad 9+).'''
+    cmd = [find_kicad_cli(), 'pcb', 'export', 'ipcd356',
+           '--output', output_file,
+           board_file]
+
+    returncode, output = _run(cmd, timeout, logger)
+    _check(returncode, output, output_file, 'IPC-D-356 netlist export')

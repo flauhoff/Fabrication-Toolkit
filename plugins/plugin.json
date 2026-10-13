@@ -1,0 +1,22 @@
+{
+    "$schema": "https://go.kicad.org/api/schemas/v1",
+    "identifier": "com.schienle.Schienle-PCB-Freigabe",
+    "name": "Schienle_PCB_Freigabe",
+    "description": "PCB-Freigabe: DRC, Fertigungsdaten, Schaltplan, Leiterplattenspezifikation und Backup mit Zeichnungsnummer und Index",
+    "runtime": {
+        "type": "python",
+        "min_version": "3.9"
+    },
+    "actions": [
+        {
+            "identifier": "release",
+            "name": "Schienle_PCB_Freigabe",
+            "description": "PCB-Freigabe: DRC, Fertigungsdaten, Schaltplan, Leiterplattenspezifikation und Backup mit Zeichnungsnummer und Index",
+            "show-button": true,
+            "scopes": ["pcb"],
+            "entrypoint": "main.py",
+            "icons-light": ["icon.png"],
+            "icons-dark": ["icon_dark.png"]
+        }
+    ]
+}

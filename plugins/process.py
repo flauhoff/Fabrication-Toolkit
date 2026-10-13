@@ -10,20 +10,19 @@ import shutil
 from collections import defaultdict
 from typing import Tuple
 
-# Interaction with KiCad.
-import pcbnew  # type: ignore
-from .utils import duplicate_footprint, footprint_has_field, footprint_get_field, footprint_to_degrees, get_plot_plan
+# Interaction with KiCad: board data via the IPC API, plots via kicad-cli (on the saved board file).
+from kipy.proto.board.board_types_pb2 import BoardLayer
+from .kicad_board import layer_canonical_name
+from .kicad_cli import export_gerbers, export_gerber, export_drill, export_ipcd356
 
 # Application definitions.
 from .config import *
 
 class ProcessManager:
-    def __init__(self, board = None):
-        # if no board is already loaded by cli mode getBoard from kicad environment
-        if board is None:
-            self.board = pcbnew.GetBoard()
-        else:
-            self.board = board
+    def __init__(self, board, logger = None):
+        # board: kicad_board.BoardAccess of the board opened in KiCad
+        self.board = board
+        self.logger = logger
         self.bom = []
         self.components = []
         self.__rotation_db = self.__read_rotation_db()
@@ -41,151 +40,65 @@ class ProcessManager:
         return f'{value:.{precision}f}'.rstrip('0').rstrip('.') or '0'
 
     def update_zone_fills(self):
-        '''Verify all zones have up-to-date fills.'''
-        filler = pcbnew.ZONE_FILLER(self.board)
-        zones = self.board.Zones()
-
-        # Fill returns true/false if a refill was made
-        # We cant use aCheck = True as that would require a rollback on the commit object if
-        # user decided to not perform the zone fill and the commit object is not exposed to python API
-        filler.Fill(zones, False)
-
-        # Finally rebuild the connectivity db
-        self.board.BuildConnectivity()
+        '''Refills all zones in KiCad.'''
+        self.board.refill_zones()
 
     def generate_gerber(self, temp_dir, extra_layers, extend_edge_cuts, alternative_edge_cuts, all_active_layers):
-        '''Generate the Gerber files.'''
-        original_settings = self.board.GetDesignSettings()
-        settings = self.board.GetDesignSettings()
-        settings.m_SolderMaskMargin = 50000
-        settings.m_SolderMaskToCopperClearance = 5000
-        settings.m_SolderMaskMinWidth = 0
-
-        plot_controller = pcbnew.PLOT_CONTROLLER(self.board)
-
-        plot_options = plot_controller.GetPlotOptions()
-        plot_options.SetOutputDirectory(temp_dir)
-        plot_options.SetPlotFrameRef(False)
-        plot_options.SetSketchPadLineWidth(pcbnew.FromMM(0.1))
-        plot_options.SetAutoScale(False)
-        plot_options.SetScale(1)
-        plot_options.SetMirror(False)
-        plot_options.SetUseGerberAttributes(True)
-        plot_options.SetUseGerberProtelExtensions(True)
-        plot_options.SetUseAuxOrigin(True)
-        plot_options.SetSubtractMaskFromSilk(True)
-        plot_options.SetUseGerberX2format(False)
-        plot_options.SetDrillMarksType(0)  # NO_DRILL_SHAPE
-
-        if hasattr(plot_options, "SetExcludeEdgeLayer"):
-            plot_options.SetExcludeEdgeLayer(True)
-
+        '''Generate the Gerber files (kicad-cli, from the saved board file).'''
         if extra_layers is not None:
             extra_layers = [element.strip() for element in extra_layers.strip().split(',') if element.strip()]
         else:
             extra_layers = []
+        extra_layer_ids = [layer for layer in (self.board.layer_by_name(name) for name in extra_layers) if layer is not None]
 
-        for layer_info in get_plot_plan(self.board):
-            if (self.board.IsLayerEnabled(layer_info[1]) and (all_active_layers or layer_info[1] in standardLayers)) or layer_info[2] in extra_layers:
-                plot_controller.SetLayer(layer_info[1])
-                plot_controller.OpenPlotfile(layer_info[2], pcbnew.PLOT_FORMAT_GERBER, layer_info[2])
+        layers = [layer for layer in self.board.enabled_layers() if all_active_layers or layer in standardLayers]
+        layers += [layer for layer in extra_layer_ids if layer not in layers]
+        merge_edge_cuts = BoardLayer.BL_Edge_Cuts in layers and (extend_edge_cuts or alternative_edge_cuts)
+        if merge_edge_cuts:
+            layers.remove(BoardLayer.BL_Edge_Cuts)
 
-                if layer_info[1] == pcbnew.Edge_Cuts and hasattr(plot_controller, 'PlotLayers') and (extend_edge_cuts or alternative_edge_cuts):
-                    seq = pcbnew.LSEQ()
-                    # uses User_2 layer for alternative Edge_Cuts layer
-                    if alternative_edge_cuts:
-                        seq.push_back(pcbnew.User_2)
-                    else:
-                        seq.push_back(layer_info[1])
-                    # includes User_1 layer with Edge_Cuts layer to allow V Cuts to be defined as User_1 layer
-                    # available for KiCad 7.0.1+
-                    if extend_edge_cuts:
-                        seq.push_back(layer_info[1])
-                        seq.push_back(pcbnew.User_1)
-                    plot_controller.PlotLayers(seq)
-                else:
-                    plot_controller.PlotLayer()
+        board_file = self.board.file_path
+        if layers:
+            export_gerbers(board_file, temp_dir, [layer_canonical_name(layer) for layer in layers], logger=self.logger)
 
-        plot_controller.ClosePlot()
-        settings = original_settings
+        if merge_edge_cuts:
+            # uses User.2 as alternative Edge.Cuts layer, includes User.1 with Edge.Cuts to allow V-cuts on User.1
+            edge_layers = [BoardLayer.BL_User_2] if alternative_edge_cuts else [BoardLayer.BL_Edge_Cuts]
+            if extend_edge_cuts:
+                edge_layers += [BoardLayer.BL_Edge_Cuts, BoardLayer.BL_User_1]
+            edge_layers = list(dict.fromkeys(edge_layers))
+
+            board_name = os.path.splitext(os.path.basename(board_file))[0]
+            output_file = os.path.join(temp_dir, '{}-{}.gm1'.format(board_name, self.board.layer_name(BoardLayer.BL_Edge_Cuts).replace('.', '_')))
+            export_gerber(board_file, output_file, [layer_canonical_name(layer) for layer in edge_layers], logger=self.logger)
 
     def generate_drills(self, temp_dir):
-        '''Generate the drill file.'''
-        drill_writer = pcbnew.EXCELLON_WRITER(self.board)
-
-        drill_writer.SetOptions(
-            False,
-            False,
-            self.board.GetDesignSettings().GetAuxOrigin(),
-            False)
-        drill_writer.SetFormat(True)
-        drill_writer.SetMapFileFormat(pcbnew.PLOT_FORMAT_GERBER)
-        drill_writer.CreateDrillandMapFilesSet(temp_dir, True, True)
+        '''Generate the drill files (kicad-cli).'''
+        export_drill(self.board.file_path, temp_dir, logger=self.logger)
 
     def generate_netlist(self, temp_dir):
-        '''Generate the connection netlist.'''
-        netlist_writer = pcbnew.IPC356D_WRITER(self.board)
-        netlist_writer.Write(os.path.join(temp_dir, netlistFileName))
-
-    def _get_footprint_rotation(self, footprint):
-        return footprint.GetOrientation().AsDegrees() if hasattr(footprint.GetOrientation(), 'AsDegrees') else footprint.GetOrientation() / 10.0
+        '''Generate the connection netlist (kicad-cli).'''
+        export_ipcd356(self.board.file_path, os.path.join(temp_dir, netlistFileName), logger=self.logger)
 
     def _get_footprint_position(self, footprint):
-        """Calculate position based on center of pads / bounding box."""
-        origin_type = self._get_origin_from_footprint(footprint)
-
-        footprint_rotation = self._get_footprint_rotation(footprint)
-        footprint_rotated = footprint_rotation % 90 != 0
-
-        # if the footprint is not rotated by a multiple of 90 degrees, 
-        # the bounding boxes will be off, so we create a temporary copy that is rotated to 0
-        if footprint_rotated:
-            footprint = duplicate_footprint(footprint)
-            footprint_to_degrees(footprint)
-
-        if origin_type == 'Anchor':
-            position = footprint.GetPosition()
-        else: # if type_origin == 'Center' or anything else
-            pads = footprint.Pads()
-            if len(pads) > 0:
-                # get bounding box based on pads only to ignore non-copper layers, e.g. silkscreen
-                bbox = pads[0].GetBoundingBox()         # start with small bounding box
-                for pad in pads:
-                    bbox.Merge(pad.GetBoundingBox())    # expand bounding box
-                position = bbox.GetCenter()
-            else:
-                position = footprint.GetPosition()      # if we have no pads we fallback to anchor
-
-        if footprint_rotated:
-            # now we determine the offset of the "true" position relative to the "KiCAD" position & apply the footprints rotation
-
-            raw_pos = footprint.GetPosition()
-            relative_position = (position[0] - raw_pos[0], position[1] - raw_pos[1])
-
-            rsin = math.sin(footprint_rotation / 180 * math.pi)
-            rcos = math.cos(footprint_rotation / 180 * math.pi)
-
-            relative_position = ( relative_position[0] * rcos + relative_position[1] * rsin, -relative_position[0] * rsin + relative_position[1] * rcos )
-
-            position = (raw_pos[0] + relative_position[0], raw_pos[1] + relative_position[1])
-
-        return position
+        """Position based on the anchor (SMD) or the center of the pads (THT), see _get_origin_from_footprint."""
+        if self._get_origin_from_footprint(footprint) == 'Anchor':
+            return footprint.position
+        return self.board.pads_center(footprint)
 
     def generate_tables(self, temp_dir, auto_translate, exclude_dnp):
         '''Generate the data tables.'''
-        if hasattr(self.board, 'GetModules'):
-            footprints = list(self.board.GetModules())
-        else:
-            footprints = list(self.board.GetFootprints())
+        footprints = self.board.footprints()
+        aux_origin = self.board.drill_origin()
 
         # sort footprint after designator
-        footprints.sort(key=lambda x: x.GetReference().upper())
+        footprints.sort(key=lambda x: x.reference.upper())
 
         # unique designator dictionary
         footprint_designators = defaultdict(int)
         for i, footprint in enumerate(footprints):
             # count unique designators
-            footprint_designators[footprint.GetReference().upper()] += 1
+            footprint_designators[footprint.reference.upper()] += 1
         bom_designators = footprint_designators.copy()
 
         if len(footprint_designators.items()) > 0:
@@ -194,17 +107,10 @@ class ProcessManager:
                     f.write('%s:%s\n' % (key, value))
 
         for i, footprint in enumerate(footprints):
-            try:
-                footprint_name = str(footprint.GetFPID().GetFootprintName())
-            except AttributeError:
-                footprint_name = str(footprint.GetFPID().GetLibItemName())
+            footprint_name = footprint.footprint_name
 
             # Get the library nickname when available
-            lib_nickname = None
-            try:
-                lib_nickname = str(footprint.GetFPID().GetLibNickname())
-            except AttributeError:
-                pass
+            lib_nickname = footprint.library_nickname
 
             layer = self._get_layer_override_from_footprint(footprint)
 
@@ -214,23 +120,23 @@ class ProcessManager:
             #     2: 'unspecified'
             # }.get(footprint.GetAttributes())
 
-            is_dnp = (footprint_has_field(footprint, 'dnp')
-                      or (footprint.GetValue().upper() == 'DNP')
-                      or getattr(footprint, 'IsDNP', bool)())
+            is_dnp = (footprint.has_field('dnp')
+                      or (footprint.value.upper() == 'DNP')
+                      or footprint.is_dnp)
             skip_dnp = exclude_dnp and is_dnp
 
-            if not (footprint.GetAttributes() & pcbnew.FP_EXCLUDE_FROM_POS_FILES)  and not is_dnp:
+            if not footprint.exclude_from_pos_files and not is_dnp:
                 # append unique ID if duplicate footprint designator
                 unique_id = ""
-                if footprint_designators[footprint.GetReference().upper()] > 1:
-                    unique_id = str(footprint_designators[footprint.GetReference().upper()])
-                    footprint_designators[footprint.GetReference().upper()] -= 1
+                if footprint_designators[footprint.reference.upper()] > 1:
+                    unique_id = str(footprint_designators[footprint.reference.upper()])
+                    footprint_designators[footprint.reference.upper()] -= 1
 
-                designator = "{}{}{}".format(footprint.GetReference().upper(), "" if unique_id == "" else "_", unique_id)
+                designator = "{}{}{}".format(footprint.reference.upper(), "" if unique_id == "" else "_", unique_id)
                 position = self._get_footprint_position(footprint)
-                mid_x = (position[0] - self.board.GetDesignSettings().GetAuxOrigin()[0]) / 1000000.0
-                mid_y = (position[1] - self.board.GetDesignSettings().GetAuxOrigin()[1]) * -1.0 / 1000000.0
-                rotation = self._get_footprint_rotation(footprint)
+                mid_x = (position[0] - aux_origin.x) / 1000000.0
+                mid_y = (position[1] - aux_origin.y) * -1.0 / 1000000.0
+                rotation = footprint.rotation
                 rotation_offset_db = self._get_rotation_from_db(footprint_name, lib_nickname) # Try with lib_nickname if available
                 rotation_offset_manual = self._get_rotation_offset_from_footprint(footprint)
 
@@ -266,23 +172,23 @@ class ProcessManager:
                     'Layer': layer,
                 })
 
-            if not (footprint.GetAttributes() & pcbnew.FP_EXCLUDE_FROM_BOM) and not skip_dnp:
+            if not footprint.exclude_from_bom and not skip_dnp:
                 # append unique ID if we are dealing with duplicate bom designator
                 unique_id = ""
-                if bom_designators[footprint.GetReference().upper()] > 1:
-                    unique_id = str(bom_designators[footprint.GetReference().upper()])
-                    bom_designators[footprint.GetReference().upper()] -= 1
+                if bom_designators[footprint.reference.upper()] > 1:
+                    unique_id = str(bom_designators[footprint.reference.upper()])
+                    bom_designators[footprint.reference.upper()] -= 1
 
                 # merge similar parts into single entry
                 insert = True
                 for component in self.bom:
                     same_footprint = component['Footprint'] == self._normalize_footprint_name(footprint_name)
-                    same_value = component['Value'].upper() == footprint.GetValue().upper()
+                    same_value = component['Value'].upper() == footprint.value.upper()
                     same_lcsc = component['LCSC Part #'] == self._get_mpn_from_footprint(footprint)
                     under_limit = component['Quantity'] < bomRowLimit
 
                     if same_footprint and same_value and same_lcsc and under_limit:
-                        component['Designator'] += ", " + "{}{}{}".format(footprint.GetReference().upper(), "" if unique_id == "" else "_", unique_id)
+                        component['Designator'] += ", " + "{}{}{}".format(footprint.reference.upper(), "" if unique_id == "" else "_", unique_id)
                         component['Quantity'] += 1
                         insert = False
                         break
@@ -290,10 +196,10 @@ class ProcessManager:
                 # add component to BOM
                 if insert:
                     self.bom.append({
-                        'Designator': "{}{}{}".format(footprint.GetReference().upper(), "" if unique_id == "" else "_", unique_id),
+                        'Designator': "{}{}{}".format(footprint.reference.upper(), "" if unique_id == "" else "_", unique_id),
                         'Footprint': self._normalize_footprint_name(footprint_name),
                         'Quantity': 1,
-                        'Value': footprint.GetValue(),
+                        'Value': footprint.value,
                         # 'Mount': mount_type,
                         'LCSC Part #': self._get_mpn_from_footprint(footprint),
                     })
@@ -473,26 +379,23 @@ class ProcessManager:
         keys = [(sn + " " + abr) for sn in supplier_names for abr in pn_abbrevs]
         fallback_keys = ['LCSC', 'JLC', 'MPN', 'Mpn', 'mpn']
 
-        if footprint_has_field(footprint, 'dnp'):
+        if footprint.has_field('dnp'):
             return 'DNP'
 
         for key in keys + fallback_keys:
-            if footprint_has_field(footprint, key) and '' != footprint_get_field(footprint, key):
-                return footprint_get_field(footprint, key)
+            if footprint.has_field(key) and '' != footprint.get_field(key):
+                return footprint.get_field(key)
 
     def _get_layer_override_from_footprint(self, footprint) -> str:
         '''Get the layer override from standard symbol fields.'''
         keys = ['FT Layer Override']
         fallback_keys = ['Layer Override', 'LayerOverride']
 
-        layer = {
-            pcbnew.F_Cu: 'top',
-            pcbnew.B_Cu: 'bottom',
-        }.get(footprint.GetLayer())
+        layer = 'bottom' if footprint.is_bottom else ('top' if footprint.is_top else None)
 
         for key in keys + fallback_keys:
-            if footprint_has_field(footprint, key):
-                temp_layer = footprint_get_field(footprint, key)
+            if footprint.has_field(key):
+                temp_layer = footprint.get_field(key)
                 if len(temp_layer) > 0:
                     if (temp_layer[0] == 'b' or temp_layer[0] == 'B'):
                         layer = "bottom"
@@ -511,8 +414,8 @@ class ProcessManager:
         offset = ""
 
         for key in keys + fallback_keys:
-            if footprint_has_field(footprint, key):
-                offset = footprint_get_field(footprint, key)
+            if footprint.has_field(key):
+                offset = footprint.get_field(key)
                 break
 
         if offset is None or offset == "":
@@ -521,7 +424,7 @@ class ProcessManager:
             try:
                 return float(offset)
             except ValueError:
-                raise RuntimeError("Rotation offset of {} is not a valid number".format(footprint.GetReference()))
+                raise RuntimeError("Rotation offset of {} is not a valid number".format(footprint.reference))
 
     def _get_position_offset_from_footprint(self, footprint) -> Tuple[float, float]:
         '''Get the position offset from standard symbol fields.'''
@@ -531,8 +434,8 @@ class ProcessManager:
         offset = ""
 
         for key in keys + fallback_keys:
-            if footprint_has_field(footprint, key):
-                offset = footprint_get_field(footprint, key)
+            if footprint.has_field(key):
+                offset = footprint.get_field(key)
                 break
 
         if offset == "":
@@ -542,24 +445,22 @@ class ProcessManager:
                 offset = offset.split(",")
                 return (float(offset[0]), float(offset[1]))
             except Exception as e:
-                raise RuntimeError("Position offset of {} is not a valid pair of numbers".format(footprint.GetReference()))
+                raise RuntimeError("Position offset of {} is not a valid pair of numbers".format(footprint.reference))
 
     def _get_origin_from_footprint(self, footprint) -> float:
         '''Get the origin from standard symbol fields.'''
         keys = ['FT Origin']
         fallback_keys = ['Origin']
 
-        attributes = footprint.GetAttributes()
-
         # determine origin type by package type
-        if attributes & pcbnew.FP_SMD:
+        if footprint.is_smd:
             origin_type = 'Anchor'
         else:
             origin_type = 'Center'
 
         for key in keys + fallback_keys:
-            if footprint_has_field(footprint, key):
-                origin_type_override = str(footprint_get_field(footprint, key)).strip().capitalize()
+            if footprint.has_field(key):
+                origin_type_override = str(footprint.get_field(key)).strip().capitalize()
 
                 if origin_type_override in ['Anchor', 'Center']:
                     origin_type = origin_type_override

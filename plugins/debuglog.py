@@ -34,10 +34,9 @@ def get_logger(project_directory=None):
     return logger
 
 
-def log_environment(logger):
+def log_environment(logger, kicad=None):
     try:
-        import pcbnew  # type: ignore
-        version = pcbnew.GetBuildVersion()
+        version = kicad.get_version()
     except Exception:
         version = 'unknown'
     logger.info('KiCad %s | Python %s | %s | executable %s', version, sys.version.split()[0], platform.platform(), sys.executable)
