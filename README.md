@@ -77,7 +77,7 @@ Kopf (Projekt, Firma, Freigegeben von), Allgemein, Leiterplatte, Mechanische Bea
 | Leiterplattendicke | Platine (änderbar) |
 | Basismaterial, Kupferdicke (außen/innen), Oberfläche, Lötstopplack- und Bestückungsdruckfarbe | **Board Setup → Physical Stackup**, sofern dort definiert |
 
-Alle übrigen Werte (z. B. Materialtyp, Via-Füllung, Konturbearbeitung, Bemerkungen) werden pro Projekt gespeichert.
+Alle übrigen Werte (z. B. Materialtyp, Kennzeichnung wie DMC-Codes oder Datumscode, Via-Füllung, Konturbearbeitung, Bemerkungen) werden pro Projekt gespeichert.
 
 ## Fehlersuche
 

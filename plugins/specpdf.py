@@ -232,10 +232,14 @@ def write_spec_pdf(path, header, sections, remarks, logo=None, views=None):
         y += 11
         c.line(left, y, right, 0.8, BLACK)
         for label, value in rows:
-            c.rect(left, y, 185, 25, CELL)
+            # long values (e.g. marking) wrap; the row grows by 11 pt per additional line
+            lines = wrap_text(value, right - left - 203, 'bold', 9)
+            row_height = 25 + 11 * (len(lines) - 1)
+            c.rect(left, y, 185, row_height, CELL)
             c.text(left + 8, y + 16, label, 'regular', 9, GREY)
-            c.text(left + 195, y + 16, value, 'bold', 9, BLACK)
-            y += 25
+            for i, line in enumerate(lines):
+                c.text(left + 195, y + 16 + 11 * i, line, 'bold', 9, BLACK)
+            y += row_height
             c.line(left, y, right, 0.5, RULE)
         y += 18
 
