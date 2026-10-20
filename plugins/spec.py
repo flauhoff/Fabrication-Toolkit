@@ -13,7 +13,6 @@ SECTIONS = [
         ('basismaterial', 'Basismaterial', ['FR4', 'Aluminium', 'PTFE', 'Polyimid'], 'FR4'),
         ('lagenanzahl', 'Lagenanzahl', AUTO, ''),
         ('abmessungen', 'Abmessungen [mm]', AUTO, ''),
-        ('designs', 'Anzahl verschiedener Designs', ['1', '2', '3', '4'], '1'),
         ('liefereinheit', 'Liefereinheit', ['Einzelkarte', 'Nutzen'], 'Einzelkarte'),
     ]),
     ('LEITERPLATTE', [
