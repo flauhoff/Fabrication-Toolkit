@@ -6,7 +6,8 @@ free text. AUTO fields are read from the board and are not editable.
 
 import os
 
-AUTO = None
+AUTO = None    # read from the board, not editable
+TEXT = 'text'  # free multi line text
 
 SECTIONS = [
     ('ALLGEMEIN', [
@@ -32,6 +33,7 @@ SECTIONS = [
                                          'verschlossen (plugged, IPC-4761 Typ III)',
                                          'gefüllt (IPC-4761 Typ VI)',
                                          'gefüllt und abgedeckelt (IPC-4761 Typ VII)'], 'keine (offen)'),
+        ('zusatz', 'Zusätzliche Spezifikationen', TEXT, ''),
     ]),
     ('MECHANISCHE BEARBEITUNG', [
         ('kontur', 'Konturbearbeitung', ['gefräst', 'geritzt (V-Cut, gebrochen)', 'gefräst und geritzt'], 'gefräst'),
@@ -46,6 +48,9 @@ HEADER_FIELDS = [
 ]
 
 AUTO_KEYS = [key for _, fields in SECTIONS for key, _, choices, _ in fields if choices is AUTO]
+
+# values that keep their line breaks
+MULTILINE_KEYS = ['firma', 'bemerkungen'] + [key for _, fields in SECTIONS for key, _, choices, _ in fields if choices is TEXT]
 
 # can be defined in Board Setup -> Physical Stackup; if so, the stackup is the source (read only in the dialog)
 STACKUP_KEYS = ['basismaterial', 'kupferdicke', 'oberflaeche', 'loetstopp', 'bestueckungsdruck']
@@ -64,7 +69,7 @@ def defaults():
 
 def build_sections(values):
     '''[(title, [(label, value), ...]), ...] for the PDF'''
-    return [(title, [(label, values.get(key, '')) for key, label, _, _ in fields]) for title, fields in SECTIONS]
+    return [(title, [(label, values.get(key, '').strip() or '-') for key, label, _, _ in fields]) for title, fields in SECTIONS]
 
 
 def board_values(board):

@@ -8,7 +8,7 @@ from .options import *
 from . import spec
 from .archive import normalize_name, get_release_name, get_release_path
 from .projectinfo import read_stackup, read_schematic_revision
-from .utils import load_user_options, save_user_options, get_layer_names, save_board, set_revision, get_project_variable
+from .utils import load_user_options, save_user_options, save_board, set_revision, get_project_variable
 from .debuglog import get_logger
 from .process import ProcessManager
 
@@ -53,12 +53,6 @@ class ReleaseForm(wx.Frame):
             PROJECT_BACKUP_OPT: True,
             OPEN_BROWSER_OPT: True,
             AUTO_FILL_OPT: True,
-            AUTO_TRANSLATE_OPT: True,
-            EXCLUDE_DNP_OPT: False,
-            EXTRA_LAYERS: "",
-            ALL_ACTIVE_LAYERS_OPT: False,
-            EXTEND_EDGE_CUT_OPT: False,
-            ALTERNATIVE_EDGE_CUT_OPT: False,
         })
 
         logo = wx.Image(os.path.join(os.path.dirname(__file__), 'logo.png'), wx.BITMAP_TYPE_PNG)
@@ -143,31 +137,6 @@ class ReleaseForm(wx.Frame):
         self.mProjectBackupCheckbox = checkbox('Projekt-Backup erstellen', PROJECT_BACKUP_OPT)
         self.mOpenBrowserCheckbox = checkbox('Freigabeordner danach öffnen', OPEN_BROWSER_OPT)
 
-        # fabrication data options from the original Fabrication Toolkit (JLCPCB oriented)
-        self.mAdvancedPane = wx.CollapsiblePane(page, label='Erweitert (Fertigungsdaten)')
-        self.mAdvancedPane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.onAdvancedToggled)
-        pane = self.mAdvancedPane.GetPane()
-        paneSizer = wx.BoxSizer(wx.VERTICAL)
-
-        self.mAdditionalLayersControl = wx.TextCtrl(pane, value=userOptions[EXTRA_LAYERS] or '')
-        self.mAdditionalLayersControl.SetHint('Zusätzliche Lagen für die Gerberdaten (kommagetrennt)')
-        self.mAdditionalLayersControl.AutoComplete(get_layer_names(board))
-        paneSizer.Add(self.mAdditionalLayersControl, 0, wx.ALL | wx.EXPAND, 5)
-
-        def pane_checkbox(label, key):
-            control = wx.CheckBox(pane, label=label)
-            control.SetValue(userOptions[key])
-            paneSizer.Add(control, 0, wx.ALL, 5)
-            return control
-
-        self.mAllActiveLayersCheckbox = pane_checkbox('Alle aktiven Lagen plotten', ALL_ACTIVE_LAYERS_OPT)
-        self.mExtendEdgeCutsCheckbox = pane_checkbox('User.1 als V-Cut-Lage (Ritzlinien) verwenden', EXTEND_EDGE_CUT_OPT)
-        self.mAlternativeEdgeCutsCheckbox = pane_checkbox('User.2 als alternative Kontur (statt Edge.Cuts) verwenden', ALTERNATIVE_EDGE_CUT_OPT)
-        self.mAutomaticTranslationCheckbox = pane_checkbox('JLC-Bestückungskorrekturen (Rotation/Position) anwenden', AUTO_TRANSLATE_OPT)
-        self.mExcludeDnpCheckbox = pane_checkbox('DNP-Bauteile aus der Stückliste ausschließen', EXCLUDE_DNP_OPT)
-        pane.SetSizer(paneSizer)
-
-        sizer.Add(self.mAdvancedPane, 0, wx.ALL | wx.EXPAND, 5)
         page.SetSizer(sizer)
 
     def createSpecPage(self, board, stored):
@@ -218,6 +187,8 @@ class ReleaseForm(wx.Frame):
                 if choices is spec.AUTO:
                     control = wx.TextCtrl(page, value=values.get(key, ''))
                     _read_only(control, 'Aus der Platine')
+                elif choices is spec.TEXT:
+                    control = wx.TextCtrl(page, value=values.get(key, ''), style=wx.TE_MULTILINE, size=wx.Size(-1, 60))
                 elif key in stackup:
                     control = wx.TextCtrl(page, value=values.get(key, ''))
                     _read_only(control, 'Aus dem Lagenaufbau (Board Setup → Physical Stackup)')
@@ -241,14 +212,6 @@ class ReleaseForm(wx.Frame):
         page.SetSizer(sizer)
         return controls
 
-    def onAdvancedToggled(self, event):
-        page = self.mNotebook.GetPage(0)
-        page.Layout()
-        page.Fit()
-        self.mNotebook.Fit()
-        self.Layout()
-        self.Fit()
-
     def onKey(self, event):
         if event.GetKeyCode() == wx.WXK_ESCAPE:
             self.Close(True)
@@ -267,16 +230,12 @@ class ReleaseForm(wx.Frame):
         options[SCHEMATIC_PDF_OPT] = self.mSchematicPdfCheckbox.GetValue()
         options[PCB_SPEC_OPT] = self.mPcbSpecCheckbox.GetValue()
         options[PCB_SPEC_VIEWS_OPT] = self.mPcbSpecViewsCheckbox.GetValue()
-        options[PCB_SPEC_VALUES] = {key: control.GetValue() if key == 'bemerkungen' else control.GetValue().strip()
+        options[PCB_SPEC_VALUES] = {key: control.GetValue() if key in spec.MULTILINE_KEYS else control.GetValue().strip()
                                     for key, control in self.mSpecControls.items()}
         options[PROJECT_BACKUP_OPT] = self.mProjectBackupCheckbox.GetValue()
         options[OPEN_BROWSER_OPT] = self.mOpenBrowserCheckbox.GetValue()
-        options[EXTRA_LAYERS] = self.mAdditionalLayersControl.GetValue()
-        options[ALL_ACTIVE_LAYERS_OPT] = self.mAllActiveLayersCheckbox.GetValue()
-        options[EXTEND_EDGE_CUT_OPT] = self.mExtendEdgeCutsCheckbox.GetValue()
-        options[ALTERNATIVE_EDGE_CUT_OPT] = self.mAlternativeEdgeCutsCheckbox.GetValue()
-        options[AUTO_TRANSLATE_OPT] = self.mAutomaticTranslationCheckbox.GetValue()
-        options[EXCLUDE_DNP_OPT] = self.mExcludeDnpCheckbox.GetValue()
+        # fabrication data as plain KiCad output (no JLCPCB specific corrections or extra layers)
+        options.update(FABRICATION_DEFAULTS)
 
         if not normalize_name(options[DRAWING_NO_OPT]) or not normalize_name(options[INDEX_OPT]):
             wx.MessageBox('Bitte Zeichnungsnummer und Index eingeben.', TITLE, wx.OK | wx.ICON_WARNING)

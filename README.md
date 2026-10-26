@@ -63,7 +63,7 @@ Ohne Projektvariable wird der Index im Dialog eingegeben. Vor der Freigabe prüf
 ☑ __Projekt-Backup erstellen__: Schaltplan, Platine, Bibliotheken, 3D-Modelle usw.; `Freigaben/`, Backups, Lock-Dateien, `fp-info-cache` und VCS-Ordner werden ausgelassen.</br>
 ☑ __Freigabeordner danach öffnen__</br>
 
-Unter **Erweitert (Fertigungsdaten)** liegen die Optionen des Original-Toolkits: zusätzliche Lagen, alle aktiven Lagen plotten, User.1 als V-Cut-Lage, User.2 als alternative Kontur, JLC-Bestückungskorrekturen und DNP-Bauteile aus der Stückliste ausschließen.
+Die Fertigungsdaten (Gerber, Bohrdaten, Stückliste, Bestückungsliste) werden ohne JLCPCB-spezifische Korrekturen oder Zusatzlagen erzeugt.
 
 Alle Einstellungen werden pro Projekt in `fabrication-toolkit-options.json` gespeichert.
 
@@ -77,15 +77,15 @@ Kopf (Projekt, Firma, Freigegeben von), Allgemein, Leiterplatte, Mechanische Bea
 | Leiterplattendicke | Platine (änderbar) |
 | Basismaterial, Kupferdicke (außen/innen), Oberfläche, Lötstopplack- und Bestückungsdruckfarbe | **Board Setup → Physical Stackup**, sofern dort definiert |
 
-Alle übrigen Werte (z. B. Materialtyp, Kennzeichnung wie DMC-Codes oder Datumscode, Via-Füllung, Konturbearbeitung, Bemerkungen) werden pro Projekt gespeichert.
+Alle übrigen Werte (z. B. Materialtyp, Kennzeichnung wie DMC-Codes oder Datumscode, Via-Füllung, zusätzliche Spezifikationen (Freitext), Konturbearbeitung, Bemerkungen) werden pro Projekt gespeichert.
 
 ## Fehlersuche
 
 Jeder Lauf wird mit Zeitstempel und Dauer pro Schritt in `schienle-pcb-freigabe.log` im Projektordner protokolliert (inkl. KiCad-Version, Optionen, `kicad-cli`-Aufrufen und -Ausgaben sowie vollständigen Fehlermeldungen). Der aktuelle Schritt steht während der Freigabe auch im Fenstertitel.
 
-## Bauteil-Attribute (Erweitert, aus dem Original-Toolkit)
+## Bauteil-Attribute (aus dem Original-Toolkit)
 
-Die folgenden Attribute stammen aus dem Fabrication Toolkit (englische Originaldokumentation). Sie steuern MPN, Rotations- und Positionskorrekturen für die Bestückungsliste – relevant vor allem in Verbindung mit „JLC-Bestückungskorrekturen anwenden“.
+Die folgenden Attribute stammen aus dem Fabrication Toolkit (englische Originaldokumentation). Sie steuern MPN sowie Rotations- und Positionskorrekturen in der Stück- und Bestückungsliste.
 
 
 > [!NOTE]  
@@ -248,7 +248,7 @@ usage: Schienle_PCB_Freigabe [-h] --path PATH --drawingNumber NUMMER --index IND
   --nonInteractive, -nI Ohne Fortschrittsanzeige (z. B. für CI)
   --additionalLayers, -aL LAGEN, --allActiveLayers, -aaL, --user1VCut, -u1, --user2AltVCut, -u2,
   --autoTranslate, -t, --excludeDNP, -e
-                        Erweiterte Optionen wie im Dialog
+                        Optionen des Original-Toolkits (im Dialog nicht mehr angeboten)
 ```
 
 Unter Windows in der `KiCad Command Prompt` mit `python` statt `python3` ausführen. Für das installierte Plugin `plugins.cli` durch den Paketnamen ersetzen, z. B.
