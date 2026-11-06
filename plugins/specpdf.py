@@ -6,7 +6,8 @@ import os
 import zlib
 
 from .helvetica_metrics import HELVETICA, HELVETICA_BOLD
-from .pngimage import read_png, crop_transparent
+from .pngimage import read_png, crop_transparent, crop_transparent_offset
+from .projection import page_matrix
 
 PAGE_WIDTH, PAGE_HEIGHT = 595.28, 841.89   # A4 in pt
 
@@ -111,6 +112,20 @@ class PdfCanvas:
         self.ops.append('q %s 0 0 %s %s %s cm /%s Do Q' % (n(w), n(h), n(x), n(self._y(y + h)), name))
         return h
 
+    def add_png(self, path):
+        '''Adds a PNG (transparent border cropped) as image resource.
+        Returns (name, cropped width, cropped height, crop left, crop top, full width, full height).'''
+        width, height, rgb, alpha = read_png(path)
+        pw, ph, rgb, alpha, crop_left, crop_top = crop_transparent_offset(width, height, rgb, alpha)
+        name = 'Im%d' % (len(self.images) + 1)
+        smask = zlib.compress(alpha) if alpha is not None else None
+        self.images.append((name, b'/Filter /FlateDecode', zlib.compress(rgb), pw, ph, smask))
+        return name, pw, ph, crop_left, crop_top, width, height
+
+    def draw_image(self, name, matrix):
+        '''Draws an image resource with the given PDF transformation matrix (a, b, c, d, e, f; page y up).'''
+        self.ops.append('q %s cm /%s Do Q' % (' '.join(self._n(v) for v in matrix), name))
+
     def png(self, path, x, y, max_w, max_h):
         '''Places a PNG (transparent border cropped) centered in the given box. Returns the used height.'''
         pw, ph, rgb, alpha = crop_transparent(*read_png(path))
@@ -183,16 +198,49 @@ def _page_foot(c, left, right, page, count):
     c.text(right, 799, 'Seite {} von {}'.format(page, count) if count > 1 else 'Seite 1', 'regular', 7, GREY, 'right')
 
 
+def _three_views(c, views, left, right, top, bottom):
+    '''
+    Draws the views (see projection.py) below each other, same scale, aligned on the board center.
+    views: [(caption, png file, 2x2 page matrix), ...]
+    '''
+    label_height, gap = 14, 16
+    items = []
+    for caption, png, ((a, b), (cc, d)) in views:
+        name, cw, ch, crop_left, crop_top, width, height = c.add_png(png)
+        # board center = image center of the render (y up, relative to the cropped image)
+        center = (width / 2.0 - crop_left, ch - (height / 2.0 - crop_top))
+        corners = [(x * a + y * cc, x * b + y * d) for x in (0, cw) for y in (0, ch)]
+        min_x, min_y = min(p[0] for p in corners), min(p[1] for p in corners)
+        tw, th = max(p[0] for p in corners) - min_x, max(p[1] for p in corners) - min_y
+        cx = center[0] * a + center[1] * cc - min_x
+        items.append((caption, name, cw, ch, (a, b, cc, d), min_x, min_y, tw, th, cx))
+
+    half_width = max(max(cx, tw - cx) for _, _, _, _, _, _, _, tw, _, cx in items)
+    scale = min((right - left) / (2.0 * half_width),
+                (bottom - top - len(items) * (label_height + gap)) / sum(item[8] for item in items))
+
+    middle = (left + right) / 2.0
+    y = top
+    for caption, name, cw, ch, (a, b, cc, d), min_x, min_y, tw, th, cx in items:
+        c.text(left, y + 9, caption, 'bold', 8, GREY)
+        y += label_height
+        origin_x = middle - cx * scale
+        origin_y = PAGE_HEIGHT - (y + th * scale)
+        c.draw_image(name, (scale * cw * a, scale * cw * b, scale * ch * cc, scale * ch * d,
+                            origin_x - scale * min_x, origin_y - scale * min_y))
+        y += th * scale + gap
+
+
 def write_spec_pdf(path, header, sections, remarks, logo=None, views=None):
     '''
     header:   dict with projekt, leiterplatte, firma, freigabedatum, freigegeben_von, zeichnungsnummer, index
     sections: [(title, [(label, value), ...]), ...]
     remarks:  free text
-    views:    optional [(caption, png file), ...] (e.g. top / bottom render) shown on page 2
+    views:    optional three-view drawing [(caption, png file, 2x2 page matrix), ...] shown on page 2
     '''
     c = PdfCanvas()
     left, right = 50, 545
-    views = [(caption, png) for caption, png in (views or []) if png and os.path.isfile(png)]
+    views = [view for view in (views or []) if view[1] and os.path.isfile(view[1])]
     count = 2 if views else 1
 
     _page_head(c, header, logo, left, right)
@@ -264,15 +312,10 @@ def write_spec_pdf(path, header, sections, remarks, logo=None, views=None):
     if views:
         c.new_page()
         _page_head(c, header, logo, left, right)
-        y = 122
-        box_h = (770 - y) / len(views) - 40
-        for caption, png in views:
-            c.text(left, y, caption, 'bold', 9, RED)
-            y += 11
-            c.line(left, y, right, 0.8, BLACK)
-            y += 10
-            c.png(png, left, y, right - left, box_h)
-            y += box_h + 19
+        c.text(left, 122, 'ANSICHTEN', 'bold', 9, RED)
+        c.text(right, 122, 'Projektionsmethode 1 (ISO 128, europäisch)', 'regular', 7, GREY, 'right')
+        c.line(left, 133, right, 0.8, BLACK)
+        _three_views(c, views, left, right, 145, 775)
         _page_foot(c, left, right, 2, count)
 
     c.save(path)

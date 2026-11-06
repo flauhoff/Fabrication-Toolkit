@@ -18,6 +18,7 @@ from .drc import load_drc_report, format_drc_summary
 from .projectinfo import read_stackup
 from .specpdf import write_spec_pdf
 from . import spec
+from . import projection
 from .config import *
 from .options import *
 from .utils import print_cli_progress_bar, save_board, set_revision
@@ -277,11 +278,17 @@ class ProcessThread(Thread):
             views = []
             render_dir = None
             if self.options.get(PCB_SPEC_VIEWS_OPT):
-                self.step(80, 'Ansicht Ober-/Unterseite rendern (kicad-cli)')
+                self.step(80, 'Ansichten rendern: Oberseite, Seitenansicht, Unterseite (kicad-cli)')
                 render_dir = tempfile.mkdtemp()
                 try:
-                    for side, caption in (('top', 'ANSICHT OBERSEITE (TOP)'), ('bottom', 'ANSICHT UNTERSEITE (BOTTOM)')):
-                        views.append((caption, render_board(board_file, os.path.join(render_dir, side + '.png'), side, logger=self.log)))
+                    try:
+                        bbox = self.process_manager.board.GetBoardEdgesBoundingBox()
+                        width, height = bbox.GetWidth(), bbox.GetHeight()
+                    except Exception:
+                        width, height = 1, 0
+                    for caption, side, wanted in projection.plan(width, height):
+                        png = render_board(board_file, os.path.join(render_dir, side + '.png'), side, logger=self.log)
+                        views.append((caption, png, projection.page_matrix(side, wanted)))
                 except Exception as e:
                     # the specification is still created, just without images
                     self.log.error(traceback.format_exc())

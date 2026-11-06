@@ -31,7 +31,7 @@ Voraussetzung: KiCad 9 oder 10 (DRC, STEP, Schaltplan-PDF und Platinenansichten 
     ├── <Name>_netlist.ipc                        IPC-Netzliste
     ├── <Name>.step                               3D-Modell
     ├── <Name>_Schaltplan.pdf                     alle Schaltplanblätter
-    ├── <Name>_Leiterplattenspezifikation.pdf     Spezifikation (Seite 2: Ansicht Ober-/Unterseite)
+    ├── <Name>_Leiterplattenspezifikation.pdf     Spezifikation (Seite 2: Oberseite, Seitenansicht, Unterseite)
     ├── <Name>_DRC-Bericht.txt                    DRC-Ergebnis (Warnungen)
     └── <Name>_Projekt-Backup.zip                 Projekt zum Freigabezeitpunkt
 
@@ -59,7 +59,7 @@ Ohne Projektvariable wird der Index im Dialog eingegeben. Vor der Freigabe prüf
 ☑ __Alle Zonen vor der Freigabe füllen__</br>
 ☑ __3D-Modell exportieren (STEP)__: Platine mit Bauteilmodellen sowie Leiterbahnen, Vias, Pads und Zonen der Außenlagen. Nullpunkt ist der Bohr-/Platzierungsursprung der Platine (in KiCad: Platzieren → Bohr-/Platzierungsursprung).</br>
 ☑ __Schaltplan als PDF exportieren__: alle Blätter von `<Projekt>.kicad_sch`; `${ZEICHNUNGSNUMMER}` und `${INDEX}` stehen im Schaltplan zur Verfügung.</br>
-☑ __Leiterplattenspezifikation erstellen (PDF)__, optional __mit Ansicht Ober- und Unterseite__ (3D-Rendering mit Bauteilmodellen)</br>
+☑ __Leiterplattenspezifikation erstellen (PDF)__, optional __mit Ansichten__: Oberseite, Seitenansicht (lange Seite) und Unterseite als 3D-Rendering mit Bauteilmodellen, untereinander angeordnet in Projektionsmethode 1 (ISO 128, europäisch): gleicher Maßstab, auf die Platinenmitte ausgerichtet, die lange Seite liegt waagerecht. In der Seitenansicht zeigen die Bauteile der Oberseite daher nach unten (Richtung Unterseite).</br>
 ☑ __Projekt-Backup erstellen__: Schaltplan, Platine, Bibliotheken, 3D-Modelle usw.; `Freigaben/`, Backups, Lock-Dateien, `fp-info-cache` und VCS-Ordner werden ausgelassen.</br>
 ☑ __Freigabeordner danach öffnen__</br>
 

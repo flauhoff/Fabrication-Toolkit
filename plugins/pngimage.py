@@ -71,11 +71,16 @@ def read_png(path):
 
 def crop_transparent(width, height, rgb, alpha, margin=4):
     '''Crops the fully transparent border around the board.'''
+    return crop_transparent_offset(width, height, rgb, alpha, margin)[:4]
+
+
+def crop_transparent_offset(width, height, rgb, alpha, margin=4):
+    '''Like crop_transparent, additionally returns the (left, top) offset of the cropped part.'''
     if alpha is None:
-        return width, height, rgb, alpha
+        return width, height, rgb, alpha, 0, 0
     rows = [y for y in range(height) if alpha[y * width:(y + 1) * width].strip(b'\x00')]
     if not rows:
-        return width, height, rgb, alpha
+        return width, height, rgb, alpha, 0, 0
     left, right = width, 0
     for y in rows:
         line = alpha[y * width:(y + 1) * width]
@@ -87,4 +92,4 @@ def crop_transparent(width, height, rgb, alpha, margin=4):
     w, h = right - left, bottom - top
     new_rgb = b''.join(rgb[(y * width + left) * 3:(y * width + right) * 3] for y in range(top, bottom))
     new_alpha = b''.join(alpha[y * width + left:y * width + right] for y in range(top, bottom))
-    return w, h, new_rgb, new_alpha
+    return w, h, new_rgb, new_alpha, left, top

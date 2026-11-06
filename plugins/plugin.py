@@ -131,7 +131,7 @@ class ReleaseForm(wx.Frame):
         self.mStepExportCheckbox = checkbox('3D-Modell exportieren (STEP)', STEP_EXPORT_OPT)
         self.mSchematicPdfCheckbox = checkbox('Schaltplan als PDF exportieren', SCHEMATIC_PDF_OPT)
         self.mPcbSpecCheckbox = checkbox('Leiterplattenspezifikation erstellen (PDF)', PCB_SPEC_OPT)
-        self.mPcbSpecViewsCheckbox = checkbox('mit Ansicht Ober- und Unterseite', PCB_SPEC_VIEWS_OPT, indent=32)
+        self.mPcbSpecViewsCheckbox = checkbox('mit Ansichten (Oberseite, Seitenansicht, Unterseite)', PCB_SPEC_VIEWS_OPT, indent=32)
         self.mPcbSpecViewsCheckbox.Enable(userOptions[PCB_SPEC_OPT])
         self.mPcbSpecCheckbox.Bind(wx.EVT_CHECKBOX, lambda e: self.mPcbSpecViewsCheckbox.Enable(self.mPcbSpecCheckbox.GetValue()))
         self.mProjectBackupCheckbox = checkbox('Projekt-Backup erstellen', PROJECT_BACKUP_OPT)
